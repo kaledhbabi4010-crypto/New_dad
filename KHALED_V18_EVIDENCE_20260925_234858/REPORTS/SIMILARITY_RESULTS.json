@@ -1,0 +1,66 @@
+[
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "candidate": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/KHALED27_WORKFLOW.py_060ed7210054.py",
+    "similarity": 1.0,
+    "score": 105,
+    "relevance": 305,
+    "syntax": {
+      "compile": false,
+      "compile_error": "unterminated string literal (detected at line 1254) (KHALED27_WORKFLOW.py, line 1254)",
+      "ast": false,
+      "ast_error": "unterminated string literal (detected at line 1254) (KHALED27_WORKFLOW.py, line 1254)",
+      "tokenize": false,
+      "tokenize_error": "('unterminated string literal (detected at line 1254)', (1254, 9))"
+    },
+    "bytes": 32668
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "candidate": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/GOODBAY220_SPECIFICATION.py_060ed7210054.py",
+    "similarity": 1.0,
+    "score": 80,
+    "relevance": 280,
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4449)",
+      "ast": false,
+      "ast_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4449)",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "bytes": 125368
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "candidate": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/KHALED27_WORKFLOW.py_060ed7210054.py",
+    "similarity": 0.012024987645560639,
+    "score": 105,
+    "relevance": 106,
+    "syntax": {
+      "compile": false,
+      "compile_error": "unterminated string literal (detected at line 1254) (GOODBAY220_SPECIFICATION.py, line 1254)",
+      "ast": false,
+      "ast_error": "unterminated string literal (detected at line 1254) (GOODBAY220_SPECIFICATION.py, line 1254)",
+      "tokenize": false,
+      "tokenize_error": "('unterminated string literal (detected at line 1254)', (1254, 9))"
+    },
+    "bytes": 32668
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "candidate": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/GOODBAY220_SPECIFICATION.py_060ed7210054.py",
+    "similarity": 0.011087317376043791,
+    "score": 80,
+    "relevance": 81,
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (KHALED27_WORKFLOW.py, line 4449)",
+      "ast": false,
+      "ast_error": "invalid syntax (KHALED27_WORKFLOW.py, line 4449)",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "bytes": 125368
+  }
+]

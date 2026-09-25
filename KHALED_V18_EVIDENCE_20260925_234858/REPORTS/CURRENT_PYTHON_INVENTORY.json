@@ -1,0 +1,71 @@
+[
+  {
+    "path": "KHALED27_WORKFLOW.py",
+    "bytes": 32668,
+    "score": 105,
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ],
+    "syntax": {
+      "compile": false,
+      "compile_error": "unterminated string literal (detected at line 1254) (KHALED27_WORKFLOW.py, line 1254)",
+      "ast": false,
+      "ast_error": "unterminated string literal (detected at line 1254) (KHALED27_WORKFLOW.py, line 1254)",
+      "tokenize": false,
+      "tokenize_error": "('unterminated string literal (detected at line 1254)', (1254, 9))"
+    }
+  },
+  {
+    "path": "KHALED_V11_1_ULTRA_FORENSIC.py",
+    "bytes": 25984,
+    "score": 65,
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "entrypoint",
+      "khaled",
+      "repair"
+    ],
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    }
+  },
+  {
+    "path": "GOODBAY220_SPECIFICATION.py",
+    "bytes": 125368,
+    "score": 80,
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "repair",
+      "github",
+      "autonomous"
+    ],
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4449)",
+      "ast": false,
+      "ast_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4449)",
+      "tokenize": true,
+      "tokenize_error": ""
+    }
+  }
+]

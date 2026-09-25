@@ -1,0 +1,48 @@
+name: Gooddaygoobuy220 Final Verification
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile protected source copies
+        run: |
+          python -m py_compile GOODDAYGOOBUY220_FINAL/GOODBAY220_SPECIFICATION.py
+          python -m py_compile GOODDAYGOOBUY220_FINAL/KHALED27_WORKFLOW.py
+          python -m py_compile GOODDAYGOOBUY220_FINAL/KHALED_WORKFLOW_FINAL.py
+          python -m py_compile GOODDAYGOOBUY220_FINAL/RUN_GOODDAYGOOBUY220.py
+
+      - name: AST validation
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          files = [
+              Path("GOODDAYGOOBUY220_FINAL/GOODBAY220_SPECIFICATION.py"),
+              Path("GOODDAYGOOBUY220_FINAL/KHALED27_WORKFLOW.py"),
+              Path("GOODDAYGOOBUY220_FINAL/KHALED_WORKFLOW_FINAL.py"),
+              Path("GOODDAYGOOBUY220_FINAL/RUN_GOODDAYGOOBUY220.py"),
+          ]
+
+          for p in files:
+              ast.parse(
+                  p.read_text(encoding="utf-8"),
+                  filename=str(p)
+              )
+              print("AST PASS:", p)
+          PY

@@ -1,0 +1,32 @@
+[
+  {
+    "path": "KHALED27_WORKFLOW.py",
+    "hits": [
+      "GOODBAY220",
+      "KHALED",
+      "REPAIR",
+      "WORKFLOW",
+      "SPECIFICATION"
+    ],
+    "score": 105
+  },
+  {
+    "path": "GOODBAY220_SPECIFICATION.py",
+    "hits": [
+      "GOODBAY220",
+      "REPAIR",
+      "AUTONOMOUS",
+      "SPECIFICATION"
+    ],
+    "score": 80
+  },
+  {
+    "path": "KHALED_V11_1_ULTRA_FORENSIC.py",
+    "hits": [
+      "KHALED",
+      "REPAIR",
+      "SPECIFICATION"
+    ],
+    "score": 65
+  }
+]

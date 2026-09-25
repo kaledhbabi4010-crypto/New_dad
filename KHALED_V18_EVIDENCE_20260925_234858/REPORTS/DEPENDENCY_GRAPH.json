@@ -1,0 +1,24 @@
+{
+  "KHALED27_WORKFLOW.py": [],
+  "KHALED_V11_1_ULTRA_FORENSIC.py": [
+    "ast",
+    "copy",
+    "datetime",
+    "hashlib",
+    "importlib.util",
+    "inspect",
+    "itertools",
+    "json",
+    "os",
+    "pathlib",
+    "shutil",
+    "signal",
+    "subprocess",
+    "sys",
+    "tempfile",
+    "time",
+    "tokenize",
+    "traceback"
+  ],
+  "GOODBAY220_SPECIFICATION.py": []
+}

@@ -1,0 +1,55 @@
+[
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "commit": "060ed7210054d6963c7de09d6b94ff1ce98e6886",
+    "path": "GOODBAY220_SPECIFICATION.py",
+    "sha256": "3f0f200990051f893b250805e6e5b8def3673fb1891c3e4d64ecbf52feff9d16",
+    "score": 80,
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "repair",
+      "github",
+      "autonomous"
+    ],
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4449)",
+      "ast": false,
+      "ast_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4449)",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "bytes": 125368
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "commit": "060ed7210054d6963c7de09d6b94ff1ce98e6886",
+    "path": "KHALED27_WORKFLOW.py",
+    "sha256": "caa84aec0ca9d07374fff84f4c2f8fef6e981abe28422e378e92d3097cd918f1",
+    "score": 105,
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ],
+    "syntax": {
+      "compile": false,
+      "compile_error": "unterminated string literal (detected at line 1254) (KHALED27_WORKFLOW.py, line 1254)",
+      "ast": false,
+      "ast_error": "unterminated string literal (detected at line 1254) (KHALED27_WORKFLOW.py, line 1254)",
+      "tokenize": false,
+      "tokenize_error": "('unterminated string literal (detected at line 1254)', (1254, 9))"
+    },
+    "bytes": 32668
+  }
+]

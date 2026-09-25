@@ -1,0 +1,80 @@
+[
+  {
+    "sha": "f7da36245ad957ca60437b6eb2aa7862a0a1bcb0",
+    "path": "KHALED_V11_1_ULTRA_FORENSIC.py",
+    "score": 65,
+    "relevance": 240,
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "entrypoint",
+      "khaled",
+      "repair"
+    ],
+    "target_hits": [],
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "bytes": 25984
+  },
+  {
+    "sha": "bdc56b6c641cd93026c947ac293992d0e250bd32",
+    "path": "GOODBAY220_SPECIFICATION.py",
+    "score": 80,
+    "relevance": 105,
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "repair",
+      "github",
+      "autonomous"
+    ],
+    "target_hits": [],
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4449)",
+      "ast": false,
+      "ast_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4449)",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "bytes": 125368
+  },
+  {
+    "sha": "edd2fdd501464ae557bc4143c018f52dde8ac411",
+    "path": "KHALED27_WORKFLOW.py",
+    "score": 105,
+    "relevance": 105,
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ],
+    "target_hits": [],
+    "syntax": {
+      "compile": false,
+      "compile_error": "unterminated string literal (detected at line 1254) (KHALED27_WORKFLOW.py, line 1254)",
+      "ast": false,
+      "ast_error": "unterminated string literal (detected at line 1254) (KHALED27_WORKFLOW.py, line 1254)",
+      "tokenize": false,
+      "tokenize_error": "('unterminated string literal (detected at line 1254)', (1254, 9))"
+    },
+    "bytes": 32668
+  }
+]

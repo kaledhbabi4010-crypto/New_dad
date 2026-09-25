@@ -1,0 +1,58 @@
+{
+  "GOODBAY220_SPECIFICATION.py": {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/KHALED27_WORKFLOW.py_060ed7210054.py",
+    "operator": "remove_separator_lines+trim_after_valid_prefix",
+    "sha256": "3cf44adec4eca3c872bb47e1f3027cef484731f4fc0f8b351b4eb07c024c1612",
+    "bytes": 10126,
+    "score": 105,
+    "similarity_to_current": 0.007020499859590003,
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  "KHALED27_WORKFLOW.py": {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "CURRENT",
+    "operator": "remove_console_headers+trim_after_valid_prefix",
+    "sha256": "73d8b5c1123889f9c6090e4ceadecf27e2633dae67738d9fd987ed51586169fd",
+    "bytes": 13655,
+    "score": 105,
+    "similarity_to_current": 0.5894659491236033,
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  }
+}

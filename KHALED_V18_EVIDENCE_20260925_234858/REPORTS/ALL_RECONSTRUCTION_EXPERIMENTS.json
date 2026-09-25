@@ -1,0 +1,660 @@
+[
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "CURRENT",
+    "operator": "identity",
+    "sha256": "3f0f200990051f893b250805e6e5b8def3673fb1891c3e4d64ecbf52feff9d16",
+    "bytes": 125368,
+    "score": 80,
+    "similarity_to_current": 1.0,
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4449)",
+      "ast": false,
+      "ast_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4449)",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "repair",
+      "github",
+      "autonomous"
+    ]
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "CURRENT",
+    "operator": "remove_separator_lines",
+    "sha256": "bf6040ade53b9797dbc6b5467c26fe522d4e2d1372eed89b422f87313b82d93a",
+    "bytes": 107108,
+    "score": 80,
+    "similarity_to_current": 0.918062304007719,
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4199)",
+      "ast": false,
+      "ast_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4199)",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "repair",
+      "github",
+      "autonomous"
+    ]
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "CURRENT",
+    "operator": "remove_console_headers",
+    "sha256": "d748ada6fe8df704a56af468fe18ce793efd39297779837029754295355a87de",
+    "bytes": 108549,
+    "score": 80,
+    "similarity_to_current": 0.9279986985911393,
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4220)",
+      "ast": false,
+      "ast_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4220)",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "repair",
+      "github",
+      "autonomous"
+    ]
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "CURRENT",
+    "operator": "remove_empty_broken_lines",
+    "sha256": "8d590640d779d666387c4724190a44cfd5b4f2e1cd23a1d2bb7aa381beffb7b5",
+    "bytes": 108612,
+    "score": 80,
+    "similarity_to_current": 0.928287739240593,
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4221)",
+      "ast": false,
+      "ast_error": "invalid syntax (GOODBAY220_SPECIFICATION.py, line 4221)",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "repair",
+      "github",
+      "autonomous"
+    ]
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "CURRENT",
+    "operator": "identity",
+    "sha256": "caa84aec0ca9d07374fff84f4c2f8fef6e981abe28422e378e92d3097cd918f1",
+    "bytes": 32668,
+    "score": 105,
+    "similarity_to_current": 1.0,
+    "syntax": {
+      "compile": false,
+      "compile_error": "unterminated string literal (detected at line 1254) (KHALED27_WORKFLOW.py, line 1254)",
+      "ast": false,
+      "ast_error": "unterminated string literal (detected at line 1254) (KHALED27_WORKFLOW.py, line 1254)",
+      "tokenize": false,
+      "tokenize_error": "('unterminated string literal (detected at line 1254)', (1254, 9))"
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "CURRENT",
+    "operator": "remove_separator_lines",
+    "sha256": "9a43efae8f71ce3162fa090b65681301476b2a2e6e99fa4adbb04bfd0d34c56b",
+    "bytes": 30053,
+    "score": 105,
+    "similarity_to_current": 0.9311561238008588,
+    "syntax": {
+      "compile": false,
+      "compile_error": "unterminated string literal (detected at line 1220) (KHALED27_WORKFLOW.py, line 1220)",
+      "ast": false,
+      "ast_error": "unterminated string literal (detected at line 1220) (KHALED27_WORKFLOW.py, line 1220)",
+      "tokenize": false,
+      "tokenize_error": "('unterminated string literal (detected at line 1220)', (1220, 9))"
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "CURRENT",
+    "operator": "remove_console_headers",
+    "sha256": "44acb564ede3c1fbd9473f8e66e1129afa946fcb418dffd60b543fa2ed4b0f25",
+    "bytes": 32608,
+    "score": 105,
+    "similarity_to_current": 0.9990798110545366,
+    "syntax": {
+      "compile": false,
+      "compile_error": "unterminated string literal (detected at line 1253) (KHALED27_WORKFLOW.py, line 1253)",
+      "ast": false,
+      "ast_error": "unterminated string literal (detected at line 1253) (KHALED27_WORKFLOW.py, line 1253)",
+      "tokenize": false,
+      "tokenize_error": "('unterminated string literal (detected at line 1253)', (1253, 9))"
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "CURRENT",
+    "operator": "trim_after_valid_prefix",
+    "sha256": "32eb149748bd3fcc8b25575c524f4f314f16f4f0b1338dde02ff322222024add",
+    "bytes": 7191,
+    "score": 95,
+    "similarity_to_current": 0.3607364428704192,
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "CURRENT",
+    "operator": "remove_separator_lines+trim_after_valid_prefix",
+    "sha256": "3cf44adec4eca3c872bb47e1f3027cef484731f4fc0f8b351b4eb07c024c1612",
+    "bytes": 10126,
+    "score": 105,
+    "similarity_to_current": 0.45980722440576455,
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "CURRENT",
+    "operator": "remove_console_headers+trim_after_valid_prefix",
+    "sha256": "73d8b5c1123889f9c6090e4ceadecf27e2633dae67738d9fd987ed51586169fd",
+    "bytes": 13655,
+    "score": 105,
+    "similarity_to_current": 0.5894659491236033,
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "CURRENT",
+    "operator": "trim_after_valid_prefix+remove_separator_lines",
+    "sha256": "e26167dc482593b4b6eac1d066c113d0d176ce0158cd624de6c1e6488e07b6b0",
+    "bytes": 6472,
+    "score": 95,
+    "similarity_to_current": 0.3305366552412135,
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "CURRENT",
+    "operator": "trim_after_valid_prefix+remove_console_headers",
+    "sha256": "594ecad322ed3a657dae606282264b4ee95ef6d328c4b70f1c964d844aa6c9db",
+    "bytes": 7131,
+    "score": 95,
+    "similarity_to_current": 0.3582622695142505,
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/KHALED27_WORKFLOW.py_060ed7210054.py",
+    "operator": "identity",
+    "sha256": "caa84aec0ca9d07374fff84f4c2f8fef6e981abe28422e378e92d3097cd918f1",
+    "bytes": 32668,
+    "score": 105,
+    "similarity_to_current": 0.012024987645560639,
+    "syntax": {
+      "compile": false,
+      "compile_error": "unterminated string literal (detected at line 1254) (GOODBAY220_SPECIFICATION.py, line 1254)",
+      "ast": false,
+      "ast_error": "unterminated string literal (detected at line 1254) (GOODBAY220_SPECIFICATION.py, line 1254)",
+      "tokenize": false,
+      "tokenize_error": "('unterminated string literal (detected at line 1254)', (1254, 9))"
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/KHALED27_WORKFLOW.py_060ed7210054.py",
+    "operator": "remove_separator_lines",
+    "sha256": "9a43efae8f71ce3162fa090b65681301476b2a2e6e99fa4adbb04bfd0d34c56b",
+    "bytes": 30053,
+    "score": 105,
+    "similarity_to_current": 0.010024287637785637,
+    "syntax": {
+      "compile": false,
+      "compile_error": "unterminated string literal (detected at line 1220) (GOODBAY220_SPECIFICATION.py, line 1220)",
+      "ast": false,
+      "ast_error": "unterminated string literal (detected at line 1220) (GOODBAY220_SPECIFICATION.py, line 1220)",
+      "tokenize": false,
+      "tokenize_error": "('unterminated string literal (detected at line 1220)', (1220, 9))"
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/KHALED27_WORKFLOW.py_060ed7210054.py",
+    "operator": "remove_console_headers",
+    "sha256": "44acb564ede3c1fbd9473f8e66e1129afa946fcb418dffd60b543fa2ed4b0f25",
+    "bytes": 32608,
+    "score": 105,
+    "similarity_to_current": 0.012029560521745744,
+    "syntax": {
+      "compile": false,
+      "compile_error": "unterminated string literal (detected at line 1253) (GOODBAY220_SPECIFICATION.py, line 1253)",
+      "ast": false,
+      "ast_error": "unterminated string literal (detected at line 1253) (GOODBAY220_SPECIFICATION.py, line 1253)",
+      "tokenize": false,
+      "tokenize_error": "('unterminated string literal (detected at line 1253)', (1253, 9))"
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/KHALED27_WORKFLOW.py_060ed7210054.py",
+    "operator": "trim_after_valid_prefix",
+    "sha256": "32eb149748bd3fcc8b25575c524f4f314f16f4f0b1338dde02ff322222024add",
+    "bytes": 7191,
+    "score": 95,
+    "similarity_to_current": 0.0038523419973260213,
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/KHALED27_WORKFLOW.py_060ed7210054.py",
+    "operator": "remove_separator_lines+trim_after_valid_prefix",
+    "sha256": "3cf44adec4eca3c872bb47e1f3027cef484731f4fc0f8b351b4eb07c024c1612",
+    "bytes": 10126,
+    "score": 105,
+    "similarity_to_current": 0.007020499859590003,
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/KHALED27_WORKFLOW.py_060ed7210054.py",
+    "operator": "remove_console_headers+trim_after_valid_prefix",
+    "sha256": "73d8b5c1123889f9c6090e4ceadecf27e2633dae67738d9fd987ed51586169fd",
+    "bytes": 13655,
+    "score": 105,
+    "similarity_to_current": 0.0050560705257016916,
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/KHALED27_WORKFLOW.py_060ed7210054.py",
+    "operator": "trim_after_valid_prefix+remove_separator_lines",
+    "sha256": "e26167dc482593b4b6eac1d066c113d0d176ce0158cd624de6c1e6488e07b6b0",
+    "bytes": 6472,
+    "score": 95,
+    "similarity_to_current": 0.0038733784974329375,
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "GOODBAY220_SPECIFICATION.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/KHALED27_WORKFLOW.py_060ed7210054.py",
+    "operator": "trim_after_valid_prefix+remove_console_headers",
+    "sha256": "594ecad322ed3a657dae606282264b4ee95ef6d328c4b70f1c964d844aa6c9db",
+    "bytes": 7131,
+    "score": 95,
+    "similarity_to_current": 0.0038540887347253395,
+    "syntax": {
+      "compile": true,
+      "compile_error": "",
+      "ast": true,
+      "ast_error": "",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "classes",
+      "goodbay220",
+      "khaled",
+      "workflow",
+      "repair",
+      "github"
+    ]
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/GOODBAY220_SPECIFICATION.py_060ed7210054.py",
+    "operator": "identity",
+    "sha256": "3f0f200990051f893b250805e6e5b8def3673fb1891c3e4d64ecbf52feff9d16",
+    "bytes": 125368,
+    "score": 80,
+    "similarity_to_current": 0.011087317376043791,
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (KHALED27_WORKFLOW.py, line 4449)",
+      "ast": false,
+      "ast_error": "invalid syntax (KHALED27_WORKFLOW.py, line 4449)",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "repair",
+      "github",
+      "autonomous"
+    ]
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/GOODBAY220_SPECIFICATION.py_060ed7210054.py",
+    "operator": "remove_separator_lines",
+    "sha256": "bf6040ade53b9797dbc6b5467c26fe522d4e2d1372eed89b422f87313b82d93a",
+    "bytes": 107108,
+    "score": 80,
+    "similarity_to_current": 0.005760220091991575,
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (KHALED27_WORKFLOW.py, line 4199)",
+      "ast": false,
+      "ast_error": "invalid syntax (KHALED27_WORKFLOW.py, line 4199)",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "repair",
+      "github",
+      "autonomous"
+    ]
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/GOODBAY220_SPECIFICATION.py_060ed7210054.py",
+    "operator": "remove_console_headers",
+    "sha256": "d748ada6fe8df704a56af468fe18ce793efd39297779837029754295355a87de",
+    "bytes": 108549,
+    "score": 80,
+    "similarity_to_current": 0.006779228330934129,
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (KHALED27_WORKFLOW.py, line 4220)",
+      "ast": false,
+      "ast_error": "invalid syntax (KHALED27_WORKFLOW.py, line 4220)",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "repair",
+      "github",
+      "autonomous"
+    ]
+  },
+  {
+    "target": "KHALED27_WORKFLOW.py",
+    "origin": "/content/KHALED_V18_20260925_234858/New_dad/KHALED_V18_EVIDENCE_20260925_234858/RECONSTRUCTION_CANDIDATES/GOODBAY220_SPECIFICATION.py_060ed7210054.py",
+    "operator": "remove_empty_broken_lines",
+    "sha256": "8d590640d779d666387c4724190a44cfd5b4f2e1cd23a1d2bb7aa381beffb7b5",
+    "bytes": 108612,
+    "score": 80,
+    "similarity_to_current": 0.0051884719524815355,
+    "syntax": {
+      "compile": false,
+      "compile_error": "invalid syntax (KHALED27_WORKFLOW.py, line 4221)",
+      "ast": false,
+      "ast_error": "invalid syntax (KHALED27_WORKFLOW.py, line 4221)",
+      "tokenize": true,
+      "tokenize_error": ""
+    },
+    "reasons": [
+      "substantial_length",
+      "imports",
+      "functions",
+      "classes",
+      "goodbay220",
+      "repair",
+      "github",
+      "autonomous"
+    ]
+  }
+]
