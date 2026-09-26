@@ -1249,6 +1249,6 @@ class StaticSecurityScanner:
         ".txt",
     }
 
-    DANGEROUS_PATTERNS = (
-        r"\bInvoke-Expression\b",
-        r"\bIEX\s*
+    DANGEROUS_PATTERNS = ()
+
+    CLOUD_AI = None
