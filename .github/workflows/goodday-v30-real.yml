@@ -1,0 +1,166 @@
+name: GOODDAYGOOBUY220-V30-REAL-EXECUTION
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: "Expected production SHA"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+
+  windows:
+    name: Windows-Real-Environment
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Environment
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force evidence | Out-Null
+          $PSVersionTable | Out-File evidence/powershell.txt
+          Get-ComputerInfo |
+            Out-File evidence/computer.txt
+          python --version |
+            Out-File evidence/python.txt
+          git rev-parse HEAD |
+            Out-File evidence/head.txt
+
+      - name: Production SHA
+        shell: powershell
+        run: |
+          (Get-FileHash `
+            GOODBAY220_SPECIFICATION.py `
+            -Algorithm SHA256).Hash |
+            Out-File evidence/production_sha.txt
+
+      - name: Compile
+        shell: powershell
+        run: |
+          python -m py_compile `
+            GOODBAY220_SPECIFICATION.py
+
+      - name: Baseline
+        shell: powershell
+        run: |
+          python GOODBAY220_SPECIFICATION.py --help
+          python GOODBAY220_SPECIFICATION.py status
+          python GOODBAY220_SPECIFICATION.py verify
+          python GOODBAY220_SPECIFICATION.py diagnose
+
+      - name: Discover Autodesk
+        shell: powershell
+        run: |
+          $roots = @(
+            "C:\Program Files\Autodesk",
+            "C:\Program Files (x86)\Autodesk"
+          )
+
+          $names = @(
+            "Revit.exe",
+            "acad.exe",
+            "accoreconsole.exe",
+            "RevitTestFrameworkConsole.exe"
+          )
+
+          foreach ($root in $roots) {
+            if (Test-Path $root) {
+              foreach ($name in $names) {
+                Get-ChildItem `
+                  -Path $root `
+                  -Filter $name `
+                  -Recurse `
+                  -ErrorAction SilentlyContinue |
+                  Select-Object FullName
+              }
+            }
+          } |
+          Out-File evidence/autodesk.txt
+
+      - name: Detect Revit
+        shell: powershell
+        run: |
+          $r = Get-Content evidence/autodesk.txt
+          if ($r -match "Revit.exe") {
+            "REAL_REVIT_BINARY_FOUND" |
+              Out-File evidence/revit_truth.txt
+          } else {
+            "NO_REVIT_BINARY" |
+              Out-File evidence/revit_truth.txt
+          }
+
+      - name: Detect AutoCAD
+        shell: powershell
+        run: |
+          $r = Get-Content evidence/autodesk.txt
+          if ($r -match "acad.exe") {
+            "REAL_AUTOCAD_BINARY_FOUND" |
+              Out-File evidence/autocad_truth.txt
+          } else {
+            "NO_AUTOCAD_BINARY" |
+              Out-File evidence/autocad_truth.txt
+          }
+
+      - name: Upload Evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GOODDAY-V30-WINDOWS
+          path: evidence
+
+
+  self-hosted-autodesk:
+    name: Authorized-Windows-Autodesk
+    if: false
+    runs-on:
+      - self-hosted
+      - windows
+      - autodesk
+    timeout-minutes: 60
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Discover Revit
+        shell: powershell
+        run: |
+          Get-ChildItem `
+            "C:\Program Files\Autodesk" `
+            -Filter Revit.exe `
+            -Recurse `
+            -ErrorAction SilentlyContinue
+
+      - name: Discover AutoCAD
+        shell: powershell
+        run: |
+          Get-ChildItem `
+            "C:\Program Files\Autodesk" `
+            -Filter acad.exe `
+            -Recurse `
+            -ErrorAction SilentlyContinue
+
+      - name: Real Autodesk Harness
+        shell: powershell
+        run: |
+          Write-Host "AUTHORIZED AUTODESK HOST DETECTED"
+          Write-Host "Project-specific Autodesk test harness required."
+          Write-Host "No PASS is generated merely by detecting the executable."
+
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GOODDAY-V30-AUTODESK
+          path: evidence
