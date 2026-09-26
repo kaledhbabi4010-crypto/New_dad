@@ -1,0 +1,85 @@
+name: GOODDAY V51 Windows Evidence
+
+on:
+  workflow_dispatch:
+
+jobs:
+  windows-evidence:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: System evidence
+        shell: powershell
+        run: |
+          Write-Host "=== WINDOWS EVIDENCE ==="
+          systeminfo
+
+      - name: Search Autodesk binaries
+        shell: powershell
+        run: |
+          $roots = @(
+            "C:\Program Files\Autodesk",
+            "C:\Program Files (x86)\Autodesk"
+          )
+
+          foreach ($root in $roots) {
+            if (Test-Path $root) {
+              Write-Host "ROOT: $root"
+
+              Get-ChildItem `
+                -Path $root `
+                -Recurse `
+                -ErrorAction SilentlyContinue `
+                -Include `
+                  Revit.exe,
+                  acad.exe,
+                  accoreconsole.exe,
+                  RevitTestFrameworkConsole.exe |
+                Select-Object FullName,Length,LastWriteTime
+            }
+          }
+
+      - name: Search Autodesk installations
+        shell: powershell
+        run: |
+          Get-ChildItem `
+            "C:\ProgramData\Autodesk" `
+            -Recurse `
+            -ErrorAction SilentlyContinue |
+            Select-Object FullName -First 500
+
+      - name: Python baseline
+        shell: powershell
+        run: |
+          if (Test-Path ".\GOODBAY220_SPECIFICATION.py") {
+            python -m py_compile .\GOODBAY220_SPECIFICATION.py
+            python .\GOODBAY220_SPECIFICATION.py --help
+            python .\GOODBAY220_SPECIFICATION.py status
+            python .\GOODBAY220_SPECIFICATION.py verify
+            python .\GOODBAY220_SPECIFICATION.py diagnose
+          }
+
+      - name: Create evidence
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force evidence | Out-Null
+
+          Get-ComputerInfo |
+            Out-File evidence\computer-info.txt
+
+          Get-ChildItem `
+            "C:\Program Files\Autodesk" `
+            -Recurse `
+            -ErrorAction SilentlyContinue |
+            Select-Object FullName |
+            Out-File evidence\autodesk-files.txt
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: goodday-v51-windows-evidence
+          path: evidence
+          if-no-files-found: warn
