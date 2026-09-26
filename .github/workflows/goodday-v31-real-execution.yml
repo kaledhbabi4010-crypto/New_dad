@@ -1,0 +1,209 @@
+name: GOODDAYGOOBUY220-V31-REAL-EXECUTION
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: "Expected production SHA"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+
+  windows-proof:
+
+    name: REAL-WINDOWS-PROOF
+
+    runs-on: windows-latest
+
+    timeout-minutes: 30
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Windows identity
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force evidence | Out-Null
+          "WINDOWS_EXECUTION_STARTED" | Out-File evidence/windows_truth.txt
+          $env:OS | Out-File evidence/os.txt
+          $env:PROCESSOR_ARCHITECTURE | Out-File evidence/arch.txt
+          $PSVersionTable | Out-File evidence/powershell.txt
+          Get-Date | Out-File evidence/time.txt
+          hostname | Out-File evidence/hostname.txt
+
+      - name: Git identity
+        shell: powershell
+        run: |
+          git rev-parse HEAD | Out-File evidence/head.txt
+          git status --short | Out-File evidence/git_status.txt
+
+      - name: Production hash
+        shell: powershell
+        run: |
+          $hash = (Get-FileHash `
+            GOODBAY220_SPECIFICATION.py `
+            -Algorithm SHA256).Hash
+          $hash | Out-File evidence/production_sha.txt
+
+      - name: Compile
+        shell: powershell
+        run: |
+          python -m py_compile GOODBAY220_SPECIFICATION.py
+          "COMPILE_PASS" | Out-File evidence/compile.txt
+
+      - name: Baseline
+        shell: powershell
+        run: |
+          python GOODBAY220_SPECIFICATION.py --help
+          python GOODBAY220_SPECIFICATION.py status
+          python GOODBAY220_SPECIFICATION.py verify
+          python GOODBAY220_SPECIFICATION.py diagnose
+          "BASELINE_PASS" | Out-File evidence/baseline.txt
+
+      - name: Search Autodesk
+        shell: powershell
+        continue-on-error: true
+        run: |
+          $roots = @(
+            "C:\Program Files\Autodesk",
+            "C:\Program Files (x86)\Autodesk"
+          )
+
+          $names = @(
+            "Revit.exe",
+            "acad.exe",
+            "accoreconsole.exe",
+            "RevitTestFrameworkConsole.exe"
+          )
+
+          $found = @()
+
+          foreach ($root in $roots) {
+            if (Test-Path $root) {
+              foreach ($name in $names) {
+                $found += Get-ChildItem `
+                  -Path $root `
+                  -Filter $name `
+                  -Recurse `
+                  -ErrorAction SilentlyContinue |
+                  Select-Object -ExpandProperty FullName
+              }
+            }
+          }
+
+          $found |
+            Sort-Object -Unique |
+            Out-File evidence/autodesk.txt
+
+          if ($found.Count -gt 0) {
+            "AUTODESK_BINARY_FOUND" |
+              Out-File evidence/autodesk_truth.txt
+          } else {
+            "NO_AUTODESK_BINARY" |
+              Out-File evidence/autodesk_truth.txt
+          }
+
+      - name: Search Autodesk processes
+        shell: powershell
+        continue-on-error: true
+        run: |
+          Get-Process |
+            Where-Object {
+              $_.ProcessName -match `
+              "Revit|acad|accore"
+            } |
+            Select-Object `
+              ProcessName,
+              Id,
+              Path |
+            Out-File evidence/autodesk_processes.txt
+
+      - name: Final Windows proof
+        shell: powershell
+        run: |
+          "WINDOWS_EXECUTION_COMPLETE" |
+            Out-File evidence/windows_truth.txt
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GOODDAY-V31-WINDOWS-PROOF
+          path: evidence
+
+
+  authorized-autodesk:
+
+    name: AUTHORIZED-REAL-AUTODESK
+
+    if: false
+
+    runs-on:
+      - self-hosted
+      - windows
+      - autodesk
+
+    timeout-minutes: 60
+
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Autodesk host proof
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force evidence | Out-Null
+
+          $revit = Get-ChildItem `
+            "C:\Program Files\Autodesk" `
+            -Filter Revit.exe `
+            -Recurse `
+            -ErrorAction SilentlyContinue
+
+          $acad = Get-ChildItem `
+            "C:\Program Files\Autodesk" `
+            -Filter acad.exe `
+            -Recurse `
+            -ErrorAction SilentlyContinue
+
+          $revit |
+            Select-Object -ExpandProperty FullName |
+            Out-File evidence/revit.txt
+
+          $acad |
+            Select-Object -ExpandProperty FullName |
+            Out-File evidence/autocad.txt
+
+          if ($revit) {
+            "REVIT_BINARY_PRESENT" |
+              Out-File evidence/revit_truth.txt
+          }
+
+          if ($acad) {
+            "AUTOCAD_BINARY_PRESENT" |
+              Out-File evidence/autocad_truth.txt
+          }
+
+      - name: Production baseline
+        shell: powershell
+        run: |
+          python -m py_compile GOODBAY220_SPECIFICATION.py
+          python GOODBAY220_SPECIFICATION.py --help
+          python GOODBAY220_SPECIFICATION.py status
+          python GOODBAY220_SPECIFICATION.py verify
+          python GOODBAY220_SPECIFICATION.py diagnose
+
+      - name: Upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GOODDAY-V31-AUTODESK-HOST
+          path: evidence
