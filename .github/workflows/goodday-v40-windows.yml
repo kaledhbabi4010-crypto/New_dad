@@ -1,0 +1,48 @@
+name: GOODDAY V40 Windows Evidence
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-proof:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Evidence
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force evidence | Out-Null
+          systeminfo | Out-File evidence/systeminfo.txt
+          Get-CimInstance Win32_OperatingSystem |
+            Format-List * |
+            Out-File evidence/os.txt
+
+          $bins = @(
+            "Revit.exe",
+            "acad.exe",
+            "accoreconsole.exe",
+            "RevitTestFrameworkConsole.exe"
+          )
+
+          foreach ($b in $bins) {
+            Get-ChildItem C:\ -Filter $b -File -Recurse `
+              -ErrorAction SilentlyContinue |
+              Select-Object -ExpandProperty FullName |
+              Out-File -Append evidence/autodesk.txt
+          }
+
+          python --version
+          python GOODBAY220_SPECIFICATION.py --help
+          python GOODBAY220_SPECIFICATION.py status
+          python GOODBAY220_SPECIFICATION.py verify
+          python GOODBAY220_SPECIFICATION.py diagnose
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: goodday-v40-windows
+          path: evidence/
