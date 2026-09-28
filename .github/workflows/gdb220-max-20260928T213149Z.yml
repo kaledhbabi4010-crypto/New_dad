@@ -1,0 +1,657 @@
+
+name: GDB220 MAX BUILD INSTALL TEST
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+
+  build-install-test:
+
+    runs-on: windows-latest
+
+    steps:
+
+      - name: Download source candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $url = "https://raw.githubusercontent.com/kaledhbabi4010-crypto/New_dad/main/__GDB220_MAX__/20260928T213149Z/GDB220_SOURCE_CANDIDATE.zip"
+
+          $zip = "$env:RUNNER_TEMP\\source.zip"
+
+          Invoke-WebRequest `
+            -Uri $url `
+            -OutFile $zip
+
+          $hash = (Get-FileHash `
+            $zip `
+            -Algorithm SHA256).Hash.ToLower()
+
+          "source_zip_sha256=$hash" |
+            Out-File "$env:GITHUB_WORKSPACE\\source.txt"
+
+          if ($hash -ne "749d09846ddee1a58496a6f838a0e2b284c12281b47ac80402b5f1ce1b8caf9d") {
+            throw "SOURCE_ZIP_HASH_MISMATCH"
+          }
+
+      - name: Extract source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $root = "$env:RUNNER_TEMP\\src"
+
+          Expand-Archive `
+            "$env:RUNNER_TEMP\\source.zip" `
+            $root `
+            -Force
+
+          Get-ChildItem `
+            $root `
+            -Recurse |
+            Select-Object FullName,Length |
+            Out-File "$env:GITHUB_WORKSPACE\\tree.txt"
+
+      - name: Discover toolchain
+        shell: pwsh
+        run: |
+          $tools = @(
+            "dotnet",
+            "msbuild",
+            "nuget",
+            "node",
+            "npm",
+            "python",
+            "py",
+            "java",
+            "javac",
+            "gradle",
+            "cmake",
+            "candle",
+            "light",
+            "wix",
+            "iscc"
+          )
+
+          $out = @()
+
+          foreach ($tool in $tools) {
+            $cmd = Get-Command `
+              $tool `
+              -ErrorAction SilentlyContinue
+
+            if ($cmd) {
+              $out += "$tool=$($cmd.Source)"
+            } else {
+              $out += "$tool=NOT_FOUND"
+            }
+          }
+
+          $out |
+            Out-File "$env:GITHUB_WORKSPACE\\toolchain.txt"
+
+      - name: Detect build files
+        shell: pwsh
+        run: |
+          $root = "$env:RUNNER_TEMP\\src"
+
+          Get-ChildItem `
+            $root `
+            -Recurse `
+            -File |
+            Where-Object {
+              $_.Name -match `
+              "(?i)(\.sln$|\.csproj$|package\.json$|pyproject\.toml$|requirements\.txt$|setup\.py$|\.iss$|\.wxs$|pom\.xml$|build\.gradle$)"
+            } |
+            Select-Object FullName |
+            Out-File "$env:GITHUB_WORKSPACE\\buildfiles.txt"
+
+      - name: Attempt .NET build
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $root = "$env:RUNNER_TEMP\\src"
+
+          $solutions = Get-ChildItem `
+            $root `
+            -Recurse `
+            -Filter "*.sln"
+
+          $projects = Get-ChildItem `
+            $root `
+            -Recurse `
+            -Filter "*.csproj"
+
+          $log = @()
+
+          foreach ($s in $solutions) {
+            $log += "SOLUTION=$($s.FullName)"
+
+            dotnet restore $s.FullName `
+              2>&1 |
+              Tee-Object `
+              -FilePath "$env:GITHUB_WORKSPACE\\dotnet_restore.txt"
+
+            dotnet build `
+              $s.FullName `
+              --configuration Release `
+              --no-restore `
+              2>&1 |
+              Tee-Object `
+              -FilePath "$env:GITHUB_WORKSPACE\\dotnet_build.txt"
+          }
+
+          foreach ($p in $projects) {
+            $log += "PROJECT=$($p.FullName)"
+          }
+
+          $log |
+            Out-File "$env:GITHUB_WORKSPACE\\dotnet_discovery.txt"
+
+      - name: Attempt Python build
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $root = "$env:RUNNER_TEMP\\src"
+
+          $spec = Get-ChildItem `
+            $root `
+            -Recurse `
+            -Filter "requirements.txt" |
+            Select-Object -First 1
+
+          $pyproject = Get-ChildItem `
+            $root `
+            -Recurse `
+            -Filter "pyproject.toml" |
+            Select-Object -First 1
+
+          if ($spec) {
+            py -m pip install `
+              --upgrade pip `
+              2>&1 |
+              Tee-Object `
+              -FilePath "$env:GITHUB_WORKSPACE\\pip_upgrade.txt"
+
+            py -m pip install `
+              -r $spec.FullName `
+              2>&1 |
+              Tee-Object `
+              -FilePath "$env:GITHUB_WORKSPACE\\pip_install.txt"
+          }
+
+          $main = Get-ChildItem `
+            $root `
+            -Recurse `
+            -Filter "*.py" |
+            Where-Object {
+              $_.Name -match "(?i)^(main|app|run|launcher)\.py$"
+            } |
+            Select-Object -First 1
+
+          if ($main) {
+            py -m compileall `
+              $root `
+              2>&1 |
+              Tee-Object `
+              -FilePath "$env:GITHUB_WORKSPACE\\python_compile.txt"
+          }
+
+      - name: Locate produced EXE
+        shell: pwsh
+        run: |
+          $root = "$env:RUNNER_TEMP\\src"
+
+          $exes = Get-ChildItem `
+            $root `
+            -Recurse `
+            -Filter "*.exe"
+
+          $data = @()
+
+          foreach ($e in $exes) {
+
+            $sha = (
+              Get-FileHash `
+                $e.FullName `
+                -Algorithm SHA256
+            ).Hash.ToLower()
+
+            $data += [ordered]@{
+              path=$e.FullName
+              sha256=$sha
+              size=$e.Length
+            }
+          }
+
+          $data |
+            ConvertTo-Json `
+              -Depth 8 |
+            Out-File `
+              "$env:GITHUB_WORKSPACE\\exes.json" `
+              -Encoding utf8
+
+      - name: Build installer when authoritative installer source exists
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $root = "$env:RUNNER_TEMP\\src"
+
+          $iss = Get-ChildItem `
+            $root `
+            -Recurse `
+            -Filter "*.iss" |
+            Select-Object -First 1
+
+          $wxs = Get-ChildItem `
+            $root `
+            -Recurse `
+            -Filter "*.wxs" |
+            Select-Object -First 1
+
+          $installerDir = "$env:RUNNER_TEMP\\installer"
+
+          New-Item `
+            -ItemType Directory `
+            -Force `
+            -Path $installerDir |
+            Out-Null
+
+          if ($iss) {
+
+            $iscc = Get-Command `
+              iscc `
+              -ErrorAction SilentlyContinue
+
+            if ($iscc) {
+
+              & $iscc.Source `
+                $iss.FullName `
+                2>&1 |
+                Tee-Object `
+                -FilePath "$env:GITHUB_WORKSPACE\\installer_build.txt"
+
+            } else {
+
+              "ISS_FOUND_BUT_ISCC_NOT_AVAILABLE" |
+                Out-File `
+                "$env:GITHUB_WORKSPACE\\installer_build.txt"
+            }
+
+          } elseif ($wxs) {
+
+            $wix = Get-Command `
+              wix `
+              -ErrorAction SilentlyContinue
+
+            if ($wix) {
+
+              wix build `
+                $wxs.FullName `
+                -o "$installerDir\\GooddayGoodbay220.msi" `
+                2>&1 |
+                Tee-Object `
+                -FilePath "$env:GITHUB_WORKSPACE\\installer_build.txt"
+
+            } else {
+
+              "WXS_FOUND_BUT_WIX_NOT_AVAILABLE" |
+                Out-File `
+                "$env:GITHUB_WORKSPACE\\installer_build.txt"
+            }
+
+          } else {
+
+            "NO_AUTHORITATIVE_INSTALLER_SOURCE" |
+              Out-File `
+              "$env:GITHUB_WORKSPACE\\installer_build.txt"
+          }
+
+      - name: Discover installer
+        shell: pwsh
+        run: |
+          $root = "$env:RUNNER_TEMP"
+
+          $installers = Get-ChildItem `
+            $root `
+            -Recurse `
+            -File |
+            Where-Object {
+              $_.Extension.ToLower() -in @(
+                ".msi",
+                ".msix",
+                ".appx"
+              )
+            }
+
+          $installers |
+            Select-Object FullName,Length |
+            Out-File `
+              "$env:GITHUB_WORKSPACE\\installers.txt"
+
+      - name: INSTALL TEST
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $installer = Get-ChildItem `
+            "$env:RUNNER_TEMP" `
+            -Recurse `
+            -File |
+            Where-Object {
+              $_.Extension.ToLower() -eq ".msi"
+            } |
+            Select-Object -First 1
+
+          if (-not $installer) {
+
+            "INSTALLER_NOT_PRESENT" |
+              Out-File `
+              "$env:GITHUB_WORKSPACE\\install_test.txt"
+
+            exit 0
+          }
+
+          $before = Get-Process |
+            Select-Object Id,ProcessName
+
+          $p = Start-Process `
+            msiexec.exe `
+            -ArgumentList @(
+              "/i",
+              "`"$($installer.FullName)`"",
+              "/qn",
+              "/norestart",
+              "/L*v",
+              "`"$env:GITHUB_WORKSPACE\\msi_install.log`""
+            ) `
+            -Wait `
+            -PassThru
+
+          "exit_code=$($p.ExitCode)" |
+            Out-File `
+            "$env:GITHUB_WORKSPACE\\install_test.txt"
+
+          Get-ChildItem `
+            "$env:ProgramFiles" `
+            -Recurse `
+            -ErrorAction SilentlyContinue |
+            Where-Object {
+              $_.Name -match "(?i)Goodday|Goodbay|Goobuy"
+            } |
+            Select-Object FullName |
+            Out-File `
+            "$env:GITHUB_WORKSPACE\\installed_files.txt"
+
+      - name: RUNTIME TEST
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $roots = @(
+            "$env:RUNNER_TEMP\\src",
+            "$env:ProgramFiles",
+            "$env:LOCALAPPDATA"
+          )
+
+          $exe = $null
+
+          foreach ($root in $roots) {
+
+            if (Test-Path $root) {
+
+              $exe = Get-ChildItem `
+                $root `
+                -Recurse `
+                -Filter "*.exe" `
+                -ErrorAction SilentlyContinue |
+                Where-Object {
+                  $_.Name -match "(?i)Goodday|Goodbay|Goobuy"
+                } |
+                Select-Object -First 1
+
+              if ($exe) {
+                break
+              }
+            }
+          }
+
+          if (-not $exe) {
+
+            "EXE_NOT_FOUND_FOR_RUNTIME" |
+              Out-File `
+              "$env:GITHUB_WORKSPACE\\runtime.txt"
+
+            exit 0
+          }
+
+          $samples = @()
+
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+
+          $proc = Start-Process `
+            -FilePath $exe.FullName `
+            -PassThru
+
+          $samples += [ordered]@{
+            event="STARTED"
+            pid=$proc.Id
+            t_ms=$sw.ElapsedMilliseconds
+          }
+
+          for ($i=0; $i -lt 20; $i++) {
+
+            Start-Sleep `
+              -Milliseconds 250
+
+            if ($proc.HasExited) {
+
+              $samples += [ordered]@{
+                event="EXITED"
+                pid=$proc.Id
+                exit_code=$proc.ExitCode
+                t_ms=$sw.ElapsedMilliseconds
+              }
+
+              break
+            }
+
+            try {
+
+              $proc.Refresh()
+
+              $samples += [ordered]@{
+                event="ALIVE"
+                pid=$proc.Id
+                t_ms=$sw.ElapsedMilliseconds
+                working_set=$proc.WorkingSet64
+                private_memory=$proc.PrivateMemorySize64
+                cpu=$proc.CPU
+              }
+
+            } catch {}
+          }
+
+          if (-not $proc.HasExited) {
+
+            $samples += [ordered]@{
+              event="TIMEOUT_STILL_RUNNING"
+              pid=$proc.Id
+            }
+
+            Stop-Process `
+              -Id $proc.Id `
+              -Force `
+              -ErrorAction SilentlyContinue
+          }
+
+          $samples |
+            ConvertTo-Json `
+              -Depth 8 |
+            Out-File `
+              "$env:GITHUB_WORKSPACE\\runtime.json" `
+              -Encoding utf8
+
+      - name: HELP TEST
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $exe = Get-ChildItem `
+            "$env:RUNNER_TEMP" `
+            -Recurse `
+            -Filter "*.exe" `
+            -ErrorAction SilentlyContinue |
+            Where-Object {
+              $_.Name -match "(?i)Goodday|Goodbay|Goobuy"
+            } |
+            Select-Object -First 1
+
+          if ($exe) {
+
+            & $exe.FullName --help *> `
+              "$env:GITHUB_WORKSPACE\\help.txt"
+
+            "exit=$LASTEXITCODE" |
+              Add-Content `
+              "$env:GITHUB_WORKSPACE\\help.txt"
+          }
+
+      - name: VERSION TEST
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $exe = Get-ChildItem `
+            "$env:RUNNER_TEMP" `
+            -Recurse `
+            -Filter "*.exe" `
+            -ErrorAction SilentlyContinue |
+            Where-Object {
+              $_.Name -match "(?i)Goodday|Goodbay|Goobuy"
+            } |
+            Select-Object -First 1
+
+          if ($exe) {
+
+            & $exe.FullName --version *> `
+              "$env:GITHUB_WORKSPACE\\version.txt"
+
+            "exit=$LASTEXITCODE" |
+              Add-Content `
+              "$env:GITHUB_WORKSPACE\\version.txt"
+          }
+
+      - name: CRASH EVENT TEST
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          try {
+
+            Get-WinEvent `
+              -FilterHashtable @{
+                LogName="Application"
+                StartTime=(Get-Date).AddMinutes(-15)
+              } |
+              Where-Object {
+                $_.Message -match "(?i)Goodday|Goodbay|Goobuy|Application Error"
+              } |
+              Select-Object -First 50 |
+              Format-List |
+              Out-File `
+              "$env:GITHUB_WORKSPACE\\crash_events.txt"
+
+          } catch {}
+
+      - name: UNINSTALL TEST
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $products = Get-CimInstance `
+            Win32_Product `
+            -ErrorAction SilentlyContinue |
+            Where-Object {
+              $_.Name -match "(?i)Goodday|Goodbay|Goobuy"
+            }
+
+          if ($products) {
+
+            foreach ($product in $products) {
+
+              $result = $product.Uninstall()
+
+              "product=$($product.Name) return=$($result.ReturnValue)" |
+                Add-Content `
+                "$env:GITHUB_WORKSPACE\\uninstall_test.txt"
+            }
+
+          } else {
+
+            "UNINSTALLER_NOT_PRESENT_OR_PRODUCT_NOT_REGISTERED" |
+              Out-File `
+              "$env:GITHUB_WORKSPACE\\uninstall_test.txt"
+          }
+
+      - name: POST UNINSTALL
+        shell: pwsh
+        if: always()
+        run: |
+          Get-Process |
+            Where-Object {
+              $_.ProcessName -match "(?i)Goodday|Goodbay|Goobuy"
+            } |
+            Select-Object Id,ProcessName |
+            Out-File `
+            "$env:GITHUB_WORKSPACE\\post_uninstall_processes.txt"
+
+          Get-ChildItem `
+            "$env:ProgramFiles" `
+            -Recurse `
+            -ErrorAction SilentlyContinue |
+            Where-Object {
+              $_.Name -match "(?i)Goodday|Goodbay|Goobuy"
+            } |
+            Select-Object FullName |
+            Out-File `
+            "$env:GITHUB_WORKSPACE\\post_uninstall_files.txt"
+
+      - name: PACKAGE EVIDENCE
+        if: always()
+        shell: pwsh
+        run: |
+          $e = "$env:GITHUB_WORKSPACE\\GDB220_EVIDENCE"
+
+          New-Item `
+            -ItemType Directory `
+            -Force `
+            -Path $e |
+            Out-Null
+
+          Get-ChildItem `
+            "$env:GITHUB_WORKSPACE" `
+            -File |
+            Where-Object {
+              $_.Name -notlike "*.zip"
+            } |
+            Copy-Item `
+              -Destination $e `
+              -Force `
+              -ErrorAction SilentlyContinue
+
+          "RUN_ID=20260928T213149Z" |
+            Out-File `
+            "$e\\engine.txt"
+
+          Get-ComputerInfo |
+            Out-File `
+            "$e\\computer.txt"
+
+      - name: UPLOAD EVIDENCE
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: GDB220-EVIDENCE-${{ github.run_id }}
+          path: GDB220_EVIDENCE
+          if-no-files-found: warn
