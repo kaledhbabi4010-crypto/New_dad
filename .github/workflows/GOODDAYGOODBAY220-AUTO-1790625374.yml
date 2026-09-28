@@ -1,0 +1,558 @@
+
+name: GOODDAYGOODBAY220 Autonomous Windows Factory
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_url:
+        required: true
+        type: string
+      expected_zip_sha256:
+        required: true
+        type: string
+      expected_exe_sha256:
+        required: true
+        type: string
+      test_id:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+
+    steps:
+
+      - name: Initialize
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\RESULT" | Out-Null
+          Write-Host "WINDOWS_FACTORY_START"
+          systeminfo | Select-String "OS Name","OS Version"
+          Get-CimInstance Win32_OperatingSystem |
+            Select Caption,Version,BuildNumber,OSArchitecture |
+            ConvertTo-Json | Out-File "$env:GITHUB_WORKSPACE\RESULT\os.json"
+
+      - name: Download package
+        shell: powershell
+        env:
+          PACKAGE_URL: ${{ inputs.package_url }}
+          EXPECTED_ZIP: ${{ inputs.expected_zip_sha256 }}
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $zip = "$env:GITHUB_WORKSPACE\RESULT\GooddayGoodbay220.zip"
+
+          try {
+            Invoke-WebRequest `
+              -Uri $env:PACKAGE_URL `
+              -OutFile $zip `
+              -UseBasicParsing `
+              -ErrorAction Stop
+
+            $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+
+            $obj = @{
+              downloaded = $true
+              expected_sha256 = $env:EXPECTED_ZIP
+              actual_sha256 = $actual
+              match = ($actual -eq $env:EXPECTED_ZIP.ToLower())
+              size = (Get-Item $zip).Length
+            }
+
+            $obj | ConvertTo-Json | Out-File "$env:GITHUB_WORKSPACE\RESULT\download.json"
+
+          } catch {
+            @{
+              downloaded = $false
+              error = $_.Exception.Message
+            } | ConvertTo-Json |
+              Out-File "$env:GITHUB_WORKSPACE\RESULT\download.json"
+          }
+
+      - name: Extract and inspect
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $zip = "$env:GITHUB_WORKSPACE\RESULT\GooddayGoodbay220.zip"
+          $root = "$env:GITHUB_WORKSPACE\RESULT\APP"
+
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+
+          try {
+            Expand-Archive -LiteralPath $zip -DestinationPath $root -Force
+
+            $files = Get-ChildItem $root -Recurse -File |
+              Select FullName,Length
+
+            $files | ConvertTo-Json |
+              Out-File "$env:GITHUB_WORKSPACE\RESULT\files.json"
+
+          } catch {
+            @{
+              extracted = $false
+              error = $_.Exception.Message
+            } | ConvertTo-Json |
+              Out-File "$env:GITHUB_WORKSPACE\RESULT\extract_error.json"
+          }
+
+      - name: Discover executable
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $root = "$env:GITHUB_WORKSPACE\RESULT\APP"
+
+          $exe = Get-ChildItem $root -Recurse -Filter *.exe -File |
+            Select -First 1
+
+          if ($exe) {
+
+            $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+
+            @{
+              found = $true
+              path = $exe.FullName
+              size = $exe.Length
+              sha256 = $hash
+              name = $exe.Name
+            } | ConvertTo-Json |
+              Out-File "$env:GITHUB_WORKSPACE\RESULT\exe.json"
+
+          } else {
+
+            @{
+              found = $false
+              error = "No executable found"
+            } | ConvertTo-Json |
+              Out-File "$env:GITHUB_WORKSPACE\RESULT\exe.json"
+          }
+
+      - name: PE and Authenticode
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          try {
+
+            $info = Get-Content "$env:GITHUB_WORKSPACE\RESULT\exe.json" |
+              ConvertFrom-Json
+
+            if ($info.found) {
+
+              $p = $info.path
+
+              $bytes = [System.IO.File]::ReadAllBytes($p)
+
+              $mz = $false
+
+              if ($bytes.Length -ge 2) {
+                $mz = (
+                  $bytes[0] -eq 0x4D -and
+                  $bytes[1] -eq 0x5A
+                )
+              }
+
+              $sig = Get-AuthenticodeSignature $p
+
+              @{
+                mz = $mz
+                authenticode_status = [string]$sig.Status
+                signer = if ($sig.SignerCertificate) {
+                  $sig.SignerCertificate.Subject
+                } else {
+                  $null
+                }
+              } | ConvertTo-Json |
+                Out-File "$env:GITHUB_WORKSPACE\RESULT\pe.json"
+
+            }
+
+          } catch {
+
+            @{
+              error = $_.Exception.Message
+            } | ConvertTo-Json |
+              Out-File "$env:GITHUB_WORKSPACE\RESULT\pe_error.json"
+          }
+
+      - name: Runtime launch
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $result = @{
+            attempted = $false
+            started = $false
+            exited = $false
+            exit_code = $null
+            error = $null
+          }
+
+          try {
+
+            $info = Get-Content "$env:GITHUB_WORKSPACE\RESULT\exe.json" |
+              ConvertFrom-Json
+
+            if ($info.found) {
+
+              $result.attempted = $true
+
+              $before = Get-Process |
+                Select-Object Id,ProcessName
+
+              $proc = Start-Process `
+                -FilePath $info.path `
+                -WorkingDirectory (Split-Path $info.path) `
+                -PassThru `
+                -ErrorAction Stop
+
+              $result.started = $true
+              $result.pid = $proc.Id
+
+              Start-Sleep -Seconds 5
+
+              $alive = Get-Process -Id $proc.Id -ErrorAction SilentlyContinue
+
+              if ($alive) {
+
+                $result.process_alive_after_5s = $true
+
+                try {
+                  $proc.CloseMainWindow() | Out-Null
+                } catch {}
+
+                Start-Sleep -Seconds 3
+
+                if (Get-Process -Id $proc.Id -ErrorAction SilentlyContinue) {
+                  Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+                }
+
+              } else {
+
+                $result.process_alive_after_5s = $false
+
+              }
+
+            }
+
+          } catch {
+
+            $result.error = $_.Exception.Message
+          }
+
+          $result | ConvertTo-Json |
+            Out-File "$env:GITHUB_WORKSPACE\RESULT\runtime.json"
+
+      - name: Repeat launch
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $out = @{
+            attempts = 0
+            starts = 0
+            failures = @()
+          }
+
+          try {
+
+            $info = Get-Content "$env:GITHUB_WORKSPACE\RESULT\exe.json" |
+              ConvertFrom-Json
+
+            if ($info.found) {
+
+              1..5 | ForEach-Object {
+
+                $out.attempts++
+
+                try {
+
+                  $p = Start-Process `
+                    -FilePath $info.path `
+                    -WorkingDirectory (Split-Path $info.path) `
+                    -PassThru `
+                    -ErrorAction Stop
+
+                  $out.starts++
+
+                  Start-Sleep -Seconds 2
+
+                  if (Get-Process -Id $p.Id -ErrorAction SilentlyContinue) {
+                    Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+                  }
+
+                } catch {
+
+                  $out.failures += $_.Exception.Message
+                }
+              }
+            }
+
+          } catch {
+            $out.failures += $_.Exception.Message
+          }
+
+          $out | ConvertTo-Json |
+            Out-File "$env:GITHUB_WORKSPACE\RESULT\repeat_launch.json"
+
+      - name: Process lifecycle
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $before = Get-Process |
+            Select Id,ProcessName
+
+          Start-Sleep -Seconds 1
+
+          $after = Get-Process |
+            Select Id,ProcessName
+
+          @{
+            before_count = $before.Count
+            after_count = $after.Count
+          } | ConvertTo-Json |
+            Out-File "$env:GITHUB_WORKSPACE\RESULT\process_lifecycle.json"
+
+      - name: Filesystem behavior
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $targets = @(
+            "$env:APPDATA",
+            "$env:LOCALAPPDATA",
+            "$env:PROGRAMDATA",
+            "$env:TEMP"
+          )
+
+          $result = @()
+
+          foreach ($t in $targets) {
+
+            try {
+
+              $result += @{
+                path = $t
+                exists = Test-Path $t
+                matches = if (Test-Path $t) {
+                  @(Get-ChildItem $t -ErrorAction SilentlyContinue |
+                    Where-Object {
+                      $_.Name -match "Goodday|Goodbay|QuickService"
+                    } |
+                    Select-Object -First 50 Name,FullName)
+                } else {
+                  @()
+                }
+              }
+
+            } catch {
+
+              $result += @{
+                path = $t
+                error = $_.Exception.Message
+              }
+            }
+          }
+
+          $result | ConvertTo-Json -Depth 8 |
+            Out-File "$env:GITHUB_WORKSPACE\RESULT\filesystem.json"
+
+      - name: Registry behavior
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $roots = @(
+            "HKCU:\Software",
+            "HKLM:\Software"
+          )
+
+          $hits = @()
+
+          foreach ($root in $roots) {
+
+            try {
+
+              $hits += Get-ChildItem $root -ErrorAction SilentlyContinue |
+                Where-Object {
+                  $_.PSChildName -match "Goodday|Goodbay|QuickService"
+                } |
+                Select-Object PSPath,PSChildName
+
+            } catch {}
+          }
+
+          $hits | ConvertTo-Json -Depth 6 |
+            Out-File "$env:GITHUB_WORKSPACE\RESULT\registry.json"
+
+      - name: Installer detection
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $info = @{
+            installer = $false
+            candidates = @()
+            uninstaller_registry = @()
+          }
+
+          $exe = Get-Content "$env:GITHUB_WORKSPACE\RESULT\exe.json" |
+            ConvertFrom-Json
+
+          if ($exe.found) {
+
+            $name = $exe.name.ToLower()
+
+            if (
+              $name -match "setup|install|installer"
+            ) {
+              $info.installer = $true
+            }
+
+          }
+
+          $uninstall_roots = @(
+            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+          )
+
+          foreach ($root in $uninstall_roots) {
+
+            try {
+
+              $info.uninstaller_registry +=
+                Get-ItemProperty $root -ErrorAction SilentlyContinue |
+                Where-Object {
+                  $_.DisplayName -match "Goodday|Goodbay|QuickService"
+                } |
+                Select DisplayName,DisplayVersion,InstallLocation,UninstallString
+
+            } catch {}
+          }
+
+          $info | ConvertTo-Json -Depth 10 |
+            Out-File "$env:GITHUB_WORKSPACE\RESULT\installer.json"
+
+      - name: Help and version probes
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $info = Get-Content "$env:GITHUB_WORKSPACE\RESULT\exe.json" |
+            ConvertFrom-Json
+
+          $results = @()
+
+          if ($info.found) {
+
+            foreach ($arg in @("--help","-h","/?","--version","-v")) {
+
+              try {
+
+                $p = Start-Process `
+                  -FilePath $info.path `
+                  -ArgumentList $arg `
+                  -PassThru `
+                  -Wait `
+                  -NoNewWindow `
+                  -ErrorAction Stop
+
+                $results += @{
+                  argument = $arg
+                  exit_code = $p.ExitCode
+                }
+
+              } catch {
+
+                $results += @{
+                  argument = $arg
+                  error = $_.Exception.Message
+                }
+              }
+            }
+          }
+
+          $results | ConvertTo-Json -Depth 8 |
+            Out-File "$env:GITHUB_WORKSPACE\RESULT\help_version.json"
+
+      - name: Resource sample
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $samples = @()
+
+          for ($i = 1; $i -le 3; $i++) {
+
+            try {
+
+              $os = Get-CimInstance Win32_OperatingSystem
+
+              $samples += @{
+                time = (Get-Date).ToString("o")
+                free_memory_mb = [math]::Round($os.FreePhysicalMemory / 1024, 2)
+              }
+
+            } catch {}
+
+            Start-Sleep -Seconds 2
+          }
+
+          $samples | ConvertTo-Json |
+            Out-File "$env:GITHUB_WORKSPACE\RESULT\resources.json"
+
+      - name: Final evidence aggregator
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $result = @{
+            timestamp = (Get-Date).ToString("o")
+            runner = $env:RUNNER_NAME
+            os = (Get-CimInstance Win32_OperatingSystem).Caption
+            files = @{}
+          }
+
+          Get-ChildItem "$env:GITHUB_WORKSPACE\RESULT" -File |
+            ForEach-Object {
+
+              try {
+
+                $text = Get-Content $_.FullName -Raw
+
+                try {
+                  $result.files[$_.Name] = $text | ConvertFrom-Json
+                } catch {
+                  $result.files[$_.Name] = $text.Substring(
+                    0,
+                    [Math]::Min($text.Length, 20000)
+                  )
+                }
+
+              } catch {
+
+                $result.files[$_.Name] = @{
+                  read_error = $_.Exception.Message
+                }
+              }
+            }
+
+          $result |
+            ConvertTo-Json -Depth 20 |
+            Out-File "$env:GITHUB_WORKSPACE\RESULT\FINAL_WINDOWS_EVIDENCE.json"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GooddayGoodbay220-Windows-${{ inputs.test_id }}
+          path: RESULT/
+          if-no-files-found: warn
