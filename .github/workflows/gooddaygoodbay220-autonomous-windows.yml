@@ -1,0 +1,299 @@
+name: GooddayGoodbay220 Autonomous Windows Verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Prepare
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\gdb220" | Out-Null
+
+      - name: Download exact release EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $url = "https://raw.githubusercontent.com/kaledhbabi4010-crypto/New_dad/main/GOODDAYGOODBAY220_FINAL/RELEASE/GooddayGoodbay220.exe"
+          $exe = "$env:RUNNER_TEMP\gdb220\GooddayGoodbay220.exe"
+
+          Invoke-WebRequest `
+            -Uri $url `
+            -OutFile $exe `
+            -UseBasicParsing
+
+          if (!(Test-Path $exe)) {
+            throw "EXE download failed"
+          }
+
+      - name: Verify exact SHA256
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $exe = "$env:RUNNER_TEMP\gdb220\GooddayGoodbay220.exe"
+
+          $hash = (Get-FileHash `
+            -Path $exe `
+            -Algorithm SHA256).Hash.ToLower()
+
+          $expected = "2d59428f34a9e613c51b0b770e6839e85abb5ecd9efbf3d9a6cf2e8edc28c350"
+
+          if ($hash -ne $expected) {
+            throw "SHA256 mismatch. Expected $expected but got $hash"
+          }
+
+          Set-Content `
+            -Path "$env:RUNNER_TEMP\gdb220\hash.txt" `
+            -Value $hash
+
+      - name: PE verification
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $exe = "$env:RUNNER_TEMP\gdb220\GooddayGoodbay220.exe"
+
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+
+          $mz = ($bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A)
+
+          if (!$mz) {
+            throw "Missing MZ header"
+          }
+
+          $offset = [BitConverter]::ToInt32($bytes, 0x3C)
+
+          $pe = (
+            $bytes[$offset] -eq 0x50 -and
+            $bytes[$offset + 1] -eq 0x45 -and
+            $bytes[$offset + 2] -eq 0x00 -and
+            $bytes[$offset + 3] -eq 0x00
+          )
+
+          if (!$pe) {
+            throw "Missing PE signature"
+          }
+
+          @{ 
+            mz = $mz
+            pe = $pe
+            pe_offset = $offset
+            size = $bytes.Length
+          } |
+          ConvertTo-Json |
+          Set-Content `
+            -Encoding UTF8 `
+            -Path "$env:RUNNER_TEMP\gdb220\pe.json"
+
+      - name: Real runtime lifecycle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $exe = "$env:RUNNER_TEMP\gdb220\GooddayGoodbay220.exe"
+          $work = "$env:RUNNER_TEMP\gdb220\runtime"
+
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+
+          $before = Get-Date
+
+          $p = Start-Process `
+            -FilePath $exe `
+            -WorkingDirectory $work `
+            -PassThru
+
+          $pid = $p.Id
+
+          Start-Sleep -Milliseconds 250
+
+          $alive250 = -not $p.HasExited
+
+          Start-Sleep -Milliseconds 750
+
+          $alive1000 = -not $p.HasExited
+
+          Start-Sleep -Milliseconds 2000
+
+          $exited = $p.HasExited
+
+          $exitCode = $null
+
+          if ($exited) {
+            $exitCode = $p.ExitCode
+          }
+
+          $eventLogs = @()
+
+          try {
+            $eventLogs = Get-WinEvent `
+              -FilterHashtable @{
+                LogName = "Application"
+                StartTime = $before
+              } `
+              -ErrorAction SilentlyContinue |
+              Select-Object `
+                -First 30 `
+                TimeCreated,
+                Id,
+                ProviderName,
+                LevelDisplayName,
+                Message
+          } catch {}
+
+          $result = [ordered]@{
+            pid = $pid
+            alive_250ms = $alive250
+            alive_1000ms = $alive1000
+            exited = $exited
+            exit_code = $exitCode
+            event_count = @($eventLogs).Count
+            events = @($eventLogs)
+          }
+
+          $result |
+            ConvertTo-Json -Depth 8 |
+            Set-Content `
+              -Encoding UTF8 `
+              -Path "$env:RUNNER_TEMP\gdb220\runtime.json"
+
+      - name: Help
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $exe = "$env:RUNNER_TEMP\gdb220\GooddayGoodbay220.exe"
+          $o = & $exe --help 2>&1
+          $code = $LASTEXITCODE
+
+          @{exit_code=$code;output=(@($o) -join "`n")} |
+            ConvertTo-Json |
+            Set-Content `
+              -Encoding UTF8 `
+              -Path "$env:RUNNER_TEMP\gdb220\help.json"
+
+      - name: Version
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $exe = "$env:RUNNER_TEMP\gdb220\GooddayGoodbay220.exe"
+          $o = & $exe --version 2>&1
+          $code = $LASTEXITCODE
+
+          @{exit_code=$code;output=(@($o) -join "`n")} |
+            ConvertTo-Json |
+            Set-Content `
+              -Encoding UTF8 `
+              -Path "$env:RUNNER_TEMP\gdb220\version.json"
+
+      - name: Process and resource facts
+        shell: pwsh
+        run: |
+          $exe = "$env:RUNNER_TEMP\gdb220\GooddayGoodbay220.exe"
+
+          $samples = @()
+
+          $p = Start-Process `
+            -FilePath $exe `
+            -PassThru
+
+          for ($i = 0; $i -lt 20; $i++) {
+
+            Start-Sleep -Milliseconds 250
+
+            if ($p.HasExited) {
+              $samples += [ordered]@{
+                t_ms = (($i + 1) * 250)
+                alive = $false
+              }
+              break
+            }
+
+            try {
+              $p.Refresh()
+
+              $samples += [ordered]@{
+                t_ms = (($i + 1) * 250)
+                alive = $true
+                working_set = $p.WorkingSet64
+                cpu_seconds = $p.TotalProcessorTime.TotalSeconds
+                threads = $p.Threads.Count
+              }
+
+            } catch {
+              $samples += [ordered]@{
+                t_ms = (($i + 1) * 250)
+                alive = $true
+                sample_error = $_.Exception.Message
+              }
+            }
+          }
+
+          if (!$p.HasExited) {
+            try { $p.Kill() } catch {}
+          }
+
+          $samples |
+            ConvertTo-Json -Depth 8 |
+            Set-Content `
+              -Encoding UTF8 `
+              -Path "$env:RUNNER_TEMP\gdb220\resources.json"
+
+      - name: Raw Windows facts
+        shell: pwsh
+        run: |
+          $facts = [ordered]@{
+            computer = $env:COMPUTERNAME
+            os = (Get-CimInstance Win32_OperatingSystem).Caption
+            version = (Get-CimInstance Win32_OperatingSystem).Version
+            architecture = $env:PROCESSOR_ARCHITECTURE
+            powershell = $PSVersionTable.PSVersion.ToString()
+            user = $env:USERNAME
+            time = (Get-Date).ToString("o")
+          }
+
+          $facts |
+            ConvertTo-Json |
+            Set-Content `
+              -Encoding UTF8 `
+              -Path "$env:RUNNER_TEMP\gdb220\windows.json"
+
+      - name: Package evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $src = "$env:RUNNER_TEMP\gdb220"
+          $out = "$env:GITHUB_WORKSPACE\GooddayGoodbay220_windows_evidence"
+
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+
+          Copy-Item `
+            -Path "$src\*" `
+            -Destination $out `
+            -Recurse `
+            -Force
+
+          Get-ChildItem `
+            -Path $out `
+            -Recurse |
+            Select-Object FullName,Length,LastWriteTime |
+            ConvertTo-Json |
+            Set-Content `
+              -Encoding UTF8 `
+              -Path "$out\manifest.json"
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: GooddayGoodbay220-windows-evidence-${{ github.run_id }}
+          path: GooddayGoodbay220_windows_evidence
+          if-no-files-found: error
