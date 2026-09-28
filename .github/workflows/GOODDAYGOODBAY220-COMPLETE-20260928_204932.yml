@@ -1,0 +1,505 @@
+name: GOODDAYGOODBAY220-COMPLETE-20260928_204932
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  independent:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+
+      - name: Prepare
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_TEST")
+          root.mkdir(parents=True, exist_ok=True)
+          (root / "logs").mkdir(exist_ok=True)
+
+          print("TEST_ROOT=", root)
+          print("Python=", os.sys.executable)
+
+      - name: Download exact EXE
+        shell: python
+        env:
+          EXE_URL: "https://raw.githubusercontent.com/kaledhbabi4010-crypto/New_dad/main/GOODDAYGOODBAY220_FINAL/RELEASE/GooddayGoodbay220.exe"
+        run: |
+          import os
+          import urllib.request
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_TEST")
+          exe = root / "GooddayGoodbay220.exe"
+
+          req = urllib.request.Request(
+              os.environ["EXE_URL"],
+              headers={
+                  "User-Agent": "GOODDAYGOODBAY220-independent-test"
+              }
+          )
+
+          with urllib.request.urlopen(req, timeout=120) as r:
+              data = r.read()
+
+          exe.write_bytes(data)
+
+          print("Downloaded:", exe)
+          print("Size:", exe.stat().st_size)
+
+      - name: Verify SHA256
+        shell: python
+        env:
+          EXPECTED_SHA: "2d59428f34a9e613c51b0b770e6839e85abb5ecd9efbf3d9a6cf2e8edc28c350"
+          EXPECTED_SIZE: "8426551"
+        run: |
+          import os
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_TEST")
+          exe = root / "GooddayGoodbay220.exe"
+
+          h = hashlib.sha256()
+          with open(exe, "rb") as f:
+              for block in iter(lambda: f.read(1024 * 1024), b""):
+                  h.update(block)
+
+          actual = h.hexdigest()
+          size = exe.stat().st_size
+
+          evidence = {
+              "expected_sha256": os.environ["EXPECTED_SHA"],
+              "actual_sha256": actual,
+              "expected_size": int(os.environ["EXPECTED_SIZE"]),
+              "actual_size": size,
+              "hash_match": actual.lower() == os.environ["EXPECTED_SHA"].lower(),
+              "size_match": size == int(os.environ["EXPECTED_SIZE"]),
+          }
+
+          (root / "logs" / "integrity.json").write_text(
+              json.dumps(evidence, indent=2),
+              encoding="utf-8"
+          )
+
+          print(json.dumps(evidence, indent=2))
+
+          if not evidence["hash_match"]:
+              raise SystemExit("EXE SHA256 mismatch")
+
+          if not evidence["size_match"]:
+              raise SystemExit("EXE size mismatch")
+
+      - name: Direct execution
+        shell: python
+        run: |
+          import subprocess
+          import time
+          import json
+          import os
+          import platform
+          import hashlib
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_TEST")
+          exe = root / "GooddayGoodbay220.exe"
+          log_dir = root / "logs"
+
+          def run_test(args, name, timeout=10):
+              stdout_path = log_dir / f"{name}_stdout.txt"
+              stderr_path = log_dir / f"{name}_stderr.txt"
+
+              start = time.time()
+
+              try:
+                  p = subprocess.Popen(
+                      [str(exe)] + args,
+                      cwd=str(root),
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.PIPE,
+                      text=True,
+                      errors="replace"
+                  )
+
+                  pid = p.pid
+
+                  try:
+                      out, err = p.communicate(timeout=timeout)
+                      timed_out = False
+                  except subprocess.TimeoutExpired:
+                      timed_out = True
+                      p.kill()
+                      out, err = p.communicate()
+
+                  elapsed = time.time() - start
+
+                  stdout_path.write_text(out or "", encoding="utf-8", errors="replace")
+                  stderr_path.write_text(err or "", encoding="utf-8", errors="replace")
+
+                  result = {
+                      "name": name,
+                      "args": args,
+                      "pid": pid,
+                      "started": True,
+                      "timed_out": timed_out,
+                      "return_code": p.returncode,
+                      "elapsed_seconds": round(elapsed, 3),
+                      "stdout_file": str(stdout_path),
+                      "stderr_file": str(stderr_path),
+                      "stdout": out or "",
+                      "stderr": err or ""
+                  }
+
+                  print(json.dumps(result, indent=2))
+                  return result
+
+              except Exception as e:
+                  result = {
+                      "name": name,
+                      "args": args,
+                      "started": False,
+                      "timed_out": False,
+                      "return_code": None,
+                      "error": repr(e)
+                  }
+
+                  print(json.dumps(result, indent=2))
+                  return result
+
+          direct = run_test([], "direct", timeout=10)
+
+          (log_dir / "direct_result.json").write_text(
+              json.dumps(direct, indent=2),
+              encoding="utf-8"
+          )
+
+          # Do NOT fail immediately.
+          # Evidence must always be uploaded.
+
+      - name: Help execution
+        shell: python
+        run: |
+          import subprocess
+          import json
+          import time
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_TEST")
+          exe = root / "GooddayGoodbay220.exe"
+
+          try:
+              start = time.time()
+              p = subprocess.run(
+                  [str(exe), "--help"],
+                  cwd=str(root),
+                  capture_output=True,
+                  text=True,
+                  errors="replace",
+                  timeout=10
+              )
+
+              result = {
+                  "started": True,
+                  "return_code": p.returncode,
+                  "timed_out": False,
+                  "elapsed_seconds": round(time.time() - start, 3),
+                  "stdout": p.stdout or "",
+                  "stderr": p.stderr or ""
+              }
+
+          except subprocess.TimeoutExpired as e:
+              result = {
+                  "started": True,
+                  "return_code": None,
+                  "timed_out": True,
+                  "stdout": str(e.stdout or ""),
+                  "stderr": str(e.stderr or "")
+              }
+
+          except Exception as e:
+              result = {
+                  "started": False,
+                  "return_code": None,
+                  "timed_out": False,
+                  "error": repr(e)
+              }
+
+          (root / "logs" / "help_result.json").write_text(
+              json.dumps(result, indent=2),
+              encoding="utf-8"
+          )
+
+          print(json.dumps(result, indent=2))
+
+      - name: Version execution
+        shell: python
+        run: |
+          import subprocess
+          import json
+          import time
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_TEST")
+          exe = root / "GooddayGoodbay220.exe"
+
+          try:
+              start = time.time()
+              p = subprocess.run(
+                  [str(exe), "--version"],
+                  cwd=str(root),
+                  capture_output=True,
+                  text=True,
+                  errors="replace",
+                  timeout=10
+              )
+
+              result = {
+                  "started": True,
+                  "return_code": p.returncode,
+                  "timed_out": False,
+                  "elapsed_seconds": round(time.time() - start, 3),
+                  "stdout": p.stdout or "",
+                  "stderr": p.stderr or ""
+              }
+
+          except subprocess.TimeoutExpired as e:
+              result = {
+                  "started": True,
+                  "return_code": None,
+                  "timed_out": True,
+                  "stdout": str(e.stdout or ""),
+                  "stderr": str(e.stderr or "")
+              }
+
+          except Exception as e:
+              result = {
+                  "started": False,
+                  "return_code": None,
+                  "timed_out": False,
+                  "error": repr(e)
+              }
+
+          (root / "logs" / "version_result.json").write_text(
+              json.dumps(result, indent=2),
+              encoding="utf-8"
+          )
+
+          print(json.dumps(result, indent=2))
+
+      - name: Repeated direct execution
+        shell: python
+        run: |
+          import subprocess
+          import time
+          import json
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_TEST")
+          exe = root / "GooddayGoodbay220.exe"
+
+          results = []
+
+          for i in range(1, 4):
+              item = {
+                  "iteration": i
+              }
+
+              try:
+                  start = time.time()
+
+                  p = subprocess.Popen(
+                      [str(exe)],
+                      cwd=str(root),
+                      stdout=subprocess.PIPE,
+                      stderr=subprocess.PIPE,
+                      text=True,
+                      errors="replace"
+                  )
+
+                  item["pid"] = p.pid
+                  item["started"] = True
+
+                  try:
+                      out, err = p.communicate(timeout=10)
+                      item["timed_out"] = False
+                  except subprocess.TimeoutExpired:
+                      item["timed_out"] = True
+                      p.kill()
+                      out, err = p.communicate()
+
+                  item["return_code"] = p.returncode
+                  item["elapsed_seconds"] = round(time.time() - start, 3)
+                  item["stdout"] = out or ""
+                  item["stderr"] = err or ""
+
+              except Exception as e:
+                  item["started"] = False
+                  item["timed_out"] = False
+                  item["return_code"] = None
+                  item["error"] = repr(e)
+
+              results.append(item)
+              print(json.dumps(item, indent=2))
+
+          (root / "logs" / "repeat_result.json").write_text(
+              json.dumps(results, indent=2),
+              encoding="utf-8"
+          )
+
+      - name: Collect raw Windows facts
+        shell: python
+        run: |
+          import os
+          import sys
+          import json
+          import platform
+          import hashlib
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_TEST")
+          exe = root / "GooddayGoodbay220.exe"
+
+          h = hashlib.sha256()
+          with open(exe, "rb") as f:
+              for block in iter(lambda: f.read(1024 * 1024), b""):
+                  h.update(block)
+
+          facts = {
+              "schema": "GOODDAYGOODBAY220_COMPLETE_INDEPENDENT_V1",
+              "timestamp_utc": __import__("datetime").datetime.now(
+                  __import__("datetime").timezone.utc
+              ).isoformat(),
+              "computer": platform.node(),
+              "platform": platform.platform(),
+              "system": platform.system(),
+              "release": platform.release(),
+              "machine": platform.machine(),
+              "python": sys.version,
+              "executable": {
+                  "name": exe.name,
+                  "size": exe.stat().st_size,
+                  "sha256": h.hexdigest(),
+                  "exists": exe.exists(),
+                  "path": str(exe)
+              }
+          }
+
+          # UTF-8 WITHOUT BOM intentionally.
+          (root / "logs" / "facts.json").write_text(
+              json.dumps(facts, indent=2),
+              encoding="utf-8"
+          )
+
+          print(json.dumps(facts, indent=2))
+
+      - name: Build raw evidence
+        shell: python
+        run: |
+          import json
+          import hashlib
+          import platform
+          import sys
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_TEST")
+          log_dir = root / "logs"
+
+          def load_json(p):
+              raw = p.read_bytes()
+
+              if raw.startswith(b"\\xef\\xbb\\xbf"):
+                  return json.loads(raw.decode("utf-8-sig"))
+
+              if raw.startswith(b"\\xff\\xfe") or raw.startswith(b"\\xfe\\xff"):
+                  return json.loads(raw.decode("utf-16"))
+
+              return json.loads(raw.decode("utf-8"))
+
+          files = {}
+
+          for p in sorted(log_dir.iterdir()):
+              if p.is_file():
+                  files[p.name] = {
+                      "size": p.stat().st_size,
+                      "sha256": hashlib.sha256(p.read_bytes()).hexdigest()
+                  }
+
+          integrity = load_json(log_dir / "integrity.json")
+          direct = load_json(log_dir / "direct_result.json")
+          help_result = load_json(log_dir / "help_result.json")
+          version_result = load_json(log_dir / "version_result.json")
+          repeat = load_json(log_dir / "repeat_result.json")
+          facts = load_json(log_dir / "facts.json")
+
+          evidence = {
+              "schema": "GOODDAYGOODBAY220_COMPLETE_EVIDENCE_V1",
+              "generated_utc": __import__("datetime").datetime.now(
+                  __import__("datetime").timezone.utc
+              ).isoformat(),
+              "program": {
+                  "expected_sha256": "2d59428f34a9e613c51b0b770e6839e85abb5ecd9efbf3d9a6cf2e8edc28c350",
+                  "expected_size": 8426551,
+                  "actual_sha256": integrity.get("actual_sha256"),
+                  "actual_size": integrity.get("actual_size")
+              },
+              "integrity": integrity,
+              "direct": direct,
+              "help": help_result,
+              "version": version_result,
+              "repeat": repeat,
+              "facts": facts,
+              "files": files
+          }
+
+          # Explicit UTF-8, NO BOM.
+          (log_dir / "FINAL_EVIDENCE.json").write_text(
+              json.dumps(evidence, indent=2, ensure_ascii=False),
+              encoding="utf-8"
+          )
+
+          print(json.dumps(evidence, indent=2))
+
+      - name: Upload raw evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GOODDAYGOODBAY220-COMPLETE-EVIDENCE
+          path: C:\GOODDAYGOODBAY220_TEST\logs
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Final Windows verdict
+        if: always()
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_TEST")
+          p = root / "logs" / "FINAL_EVIDENCE.json"
+
+          if not p.exists():
+              print("FINAL_EVIDENCE_MISSING")
+              raise SystemExit(1)
+
+          raw = p.read_bytes()
+
+          if raw.startswith(b"\\xef\\xbb\\xbf"):
+              data = json.loads(raw.decode("utf-8-sig"))
+          else:
+              data = json.loads(raw.decode("utf-8"))
+
+          print("=" * 80)
+          print("WINDOWS RAW EVIDENCE CREATED")
+          print("=" * 80)
+          print(json.dumps(data, indent=2, ensure_ascii=False))
+
+          # This step deliberately does not manufacture a program failure.
+          # Artifact evidence is authoritative for the Colab analyzer.
