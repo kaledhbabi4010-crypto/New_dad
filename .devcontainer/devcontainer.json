@@ -9,10 +9,10 @@
         "github.vscode-github-actions"
       ],
       "settings": {
-        "python.testing.pytestEnabled": true
+        "python.testing.pytestEnabled": true,
+        "python.analysis.autoImportCompletions": true
       }
     }
   },
-  "postCreateCommand": "python -m pip install --upgrade pip",
-  "remoteUser": "vscode"
+  "postCreateCommand": "python -m pip install --upgrade pip"
 }
