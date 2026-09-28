@@ -1,0 +1,690 @@
+name: GOODDAYGOODBAY220-V5-20260928_203523
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deep-runtime:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+
+      - name: Prepare
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\V5" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\V5\pkg" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\V5\reports" | Out-Null
+
+      - name: Download exact package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $url = "https://raw.githubusercontent.com/kaledhbabi4010-crypto/New_dad/main/GOODDAYGOODBAY220_FINAL/RELEASE/GooddayGoodbay220.zip"
+          $zip = "$env:GITHUB_WORKSPACE\V5\pkg\GooddayGoodbay220.zip"
+
+          Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+
+          $expected = "6a15d38a988a653ced29d549fa7bdf4a5c7c7cf82a7373afe32fb9fb3012a7cb"
+
+          if ($hash -ne $expected) {
+            throw "ZIP SHA256 mismatch. Actual=$hash Expected=$expected"
+          }
+
+          Expand-Archive -LiteralPath $zip -DestinationPath "$env:GITHUB_WORKSPACE\V5\pkg\EXTRACTED" -Force
+
+      - name: Verify exact EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $exe = Get-ChildItem `
+            "$env:GITHUB_WORKSPACE\V5\pkg\EXTRACTED" `
+            -Filter "GooddayGoodbay220.exe" `
+            -File `
+            -Recurse |
+            Select-Object -First 1
+
+          if (-not $exe) {
+            throw "EXE not found."
+          }
+
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLower()
+
+          $expected = "2d59428f34a9e613c51b0b770e6839e85abb5ecd9efbf3d9a6cf2e8edc28c350"
+
+          if ($hash -ne $expected) {
+            throw "EXE SHA256 mismatch. Actual=$hash Expected=$expected"
+          }
+
+      - name: Deep real Windows evidence
+        shell: pwsh
+        run: |
+
+          $ErrorActionPreference = "Continue"
+
+          $root = "$env:GITHUB_WORKSPACE\V5"
+          $exe = Get-ChildItem `
+            "$root\pkg\EXTRACTED" `
+            -Filter "GooddayGoodbay220.exe" `
+            -File `
+            -Recurse |
+            Select-Object -First 1
+
+          $exePath = $exe.FullName
+
+          function Safe-Array($x) {
+            if ($null -eq $x) { return @() }
+            if ($x -is [System.Array]) { return @($x) }
+            return @($x)
+          }
+
+          function Get-ProcessSnapshotByPid($pid) {
+
+            $result = [ordered]@{
+              pid = $pid
+              found = $false
+              process = $null
+              cim = $null
+              cpu = $null
+              working_set = $null
+              private_memory = $null
+              handles = $null
+              threads = $null
+            }
+
+            try {
+              $p = Get-Process -Id $pid -ErrorAction Stop
+
+              $result.found = $true
+              $result.cpu = $p.CPU
+              $result.working_set = $p.WorkingSet64
+              $result.private_memory = $p.PrivateMemorySize64
+              $result.handles = $p.HandleCount
+
+              try {
+                $result.threads = $p.Threads.Count
+              }
+              catch {}
+
+              $result.process = [ordered]@{
+                id = $p.Id
+                name = $p.ProcessName
+                start_time = (
+                  try {
+                    $p.StartTime.ToUniversalTime().ToString("o")
+                  }
+                  catch {
+                    $null
+                  }
+                )
+                has_exited = $p.HasExited
+                exit_code = (
+                  if ($p.HasExited) {
+                    try { $p.ExitCode } catch { $null }
+                  }
+                  else { $null }
+                )
+                main_window_handle = $p.MainWindowHandle.ToInt64()
+                main_window_title = $p.MainWindowTitle
+              }
+            }
+            catch {}
+
+            try {
+              $c = Get-CimInstance Win32_Process `
+                -Filter "ProcessId = $pid" `
+                -ErrorAction Stop
+
+              if ($c) {
+
+                $carr = @($c)
+
+                if ($carr.Count -gt 0) {
+                  $c0 = $carr[0]
+
+                  $result.cim = [ordered]@{
+                    process_id = $c0.ProcessId
+                    parent_process_id = $c0.ParentProcessId
+                    name = $c0.Name
+                    executable_path = $c0.ExecutablePath
+                    command_line = $c0.CommandLine
+                    creation_date = (
+                      if ($c0.CreationDate) {
+                        [Management.ManagementDateTimeConverter]::ToDateTime(
+                          $c0.CreationDate
+                        ).ToUniversalTime().ToString("o")
+                      }
+                      else {
+                        $null
+                      }
+                    )
+                  }
+                }
+              }
+            }
+            catch {}
+
+            return $result
+          }
+
+          function Get-ApplicationEvents($start, $end, $name) {
+
+            $events = @()
+
+            try {
+
+              $filter = @{
+                LogName = "Application"
+                StartTime = $start.AddSeconds(-5)
+                EndTime = $end.AddSeconds(5)
+              }
+
+              $items = Get-WinEvent -FilterHashtable $filter -ErrorAction Stop
+
+              foreach ($e in @($items)) {
+
+                $msg = ""
+
+                try {
+                  $msg = [string]$e.Message
+                }
+                catch {}
+
+                if (
+                  ($msg -match [regex]::Escape($name)) -or
+                  ($msg -match "Application Error") -or
+                  ($msg -match "Windows Error Reporting")
+                ) {
+
+                  $events += [ordered]@{
+                    id = $e.Id
+                    provider = $e.ProviderName
+                    level = $e.LevelDisplayName
+                    time = $e.TimeCreated.ToUniversalTime().ToString("o")
+                    message = $msg
+                  }
+                }
+              }
+            }
+            catch {}
+
+            return @($events)
+          }
+
+          function Get-RecentNetwork($pid) {
+
+            $connections = @()
+
+            try {
+
+              if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+
+                $connections = @(
+                  Get-NetTCPConnection -OwningProcess $pid -ErrorAction SilentlyContinue |
+                  ForEach-Object {
+                    [ordered]@{
+                      state = $_.State.ToString()
+                      local_address = $_.LocalAddress
+                      local_port = $_.LocalPort
+                      remote_address = $_.RemoteAddress
+                      remote_port = $_.RemotePort
+                    }
+                  }
+                )
+              }
+            }
+            catch {}
+
+            return @($connections)
+          }
+
+          function Get-Children($pid) {
+
+            $children = @()
+
+            try {
+              $all = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+
+              foreach ($p in $all) {
+                if ($p.ParentProcessId -eq $pid) {
+                  $children += [ordered]@{
+                    pid = $p.ProcessId
+                    parent_pid = $p.ParentProcessId
+                    name = $p.Name
+                    path = $p.ExecutablePath
+                    command_line = $p.CommandLine
+                  }
+                }
+              }
+            }
+            catch {}
+
+            return @($children)
+          }
+
+          function Get-FileInventory($directory) {
+
+            $result = @()
+
+            try {
+              $items = @(Get-ChildItem `
+                -LiteralPath $directory `
+                -Recurse `
+                -Force `
+                -ErrorAction SilentlyContinue)
+
+              foreach ($x in $items) {
+                $result += [ordered]@{
+                  full_name = $x.FullName
+                  length = if ($x.PSIsContainer) { $null } else { $x.Length }
+                  directory = $x.PSIsContainer
+                  last_write = $x.LastWriteTimeUtc.ToString("o")
+                }
+              }
+            }
+            catch {}
+
+            return @($result)
+          }
+
+          function Get-RegistryInventory {
+
+            $result = @()
+
+            $roots = @(
+              "HKCU:\Software",
+              "HKCU:\Software\Classes",
+              "HKLM:\Software"
+            )
+
+            foreach ($root in $roots) {
+
+              try {
+
+                $items = @(Get-ChildItem `
+                  -Path $root `
+                  -ErrorAction SilentlyContinue |
+                  Where-Object {
+                    $_.Name -match "Goodday|Goodbay|220"
+                  })
+
+                foreach ($x in $items) {
+                  $result += [ordered]@{
+                    path = $x.PSPath
+                  }
+                }
+              }
+              catch {}
+            }
+
+            return @($result)
+          }
+
+          function Run-One($iteration) {
+
+            $beforeFiles = Get-FileInventory $root
+            $beforeRegistry = Get-RegistryInventory
+
+            $launchTime = [DateTime]::UtcNow
+
+            $p = Start-Process `
+              -FilePath $exePath `
+              -PassThru `
+              -WorkingDirectory $root
+
+            $pid = $p.Id
+
+            $samples = @()
+            $aliveObserved = $false
+
+            $maxMilliseconds = 5000
+            $stepMilliseconds = 200
+
+            $sw = [Diagnostics.Stopwatch]::StartNew()
+
+            while ($sw.ElapsedMilliseconds -lt $maxMilliseconds) {
+
+              Start-Sleep -Milliseconds $stepMilliseconds
+
+              $snap = Get-ProcessSnapshotByPid $pid
+
+              $snap["elapsed_ms"] = $sw.ElapsedMilliseconds
+
+              if ($snap["found"] -eq $true) {
+                $aliveObserved = $true
+              }
+
+              $samples += $snap
+
+              try {
+                if ($p.HasExited) {
+                  break
+                }
+              }
+              catch {
+                break
+              }
+            }
+
+            $sw.Stop()
+
+            $endTime = [DateTime]::UtcNow
+
+            $hasExited = $false
+            $exitCode = $null
+
+            try {
+              $p.Refresh()
+              $hasExited = $p.HasExited
+
+              if ($hasExited) {
+                try {
+                  $exitCode = $p.ExitCode
+                }
+                catch {}
+              }
+            }
+            catch {}
+
+            # Extra observation after normal termination.
+            Start-Sleep -Milliseconds 300
+
+            $finalSnapshot = Get-ProcessSnapshotByPid $pid
+            $children = Get-Children $pid
+            $network = Get-RecentNetwork $pid
+
+            $afterFiles = Get-FileInventory $root
+            $afterRegistry = Get-RegistryInventory
+
+            $applicationEvents = Get-ApplicationEvents `
+              $launchTime `
+              $endTime `
+              $exe.Name
+
+            $fileChanges = @()
+
+            $beforeMap = @{}
+            foreach ($f in @($beforeFiles)) {
+              if ($f.full_name) {
+                $beforeMap[$f.full_name] = (
+                  ConvertTo-Json $f -Compress
+                )
+              }
+            }
+
+            foreach ($f in @($afterFiles)) {
+
+              if (-not $f.full_name) {
+                continue
+              }
+
+              $j = ConvertTo-Json $f -Compress
+
+              if (
+                (-not $beforeMap.ContainsKey($f.full_name)) -or
+                ($beforeMap[$f.full_name] -ne $j)
+              ) {
+                $fileChanges += $f
+              }
+            }
+
+            $registryChanges = @()
+
+            $beforeRegSet = @{}
+            foreach ($r in @($beforeRegistry)) {
+              if ($r.path) {
+                $beforeRegSet[$r.path] = $true
+              }
+            }
+
+            foreach ($r in @($afterRegistry)) {
+              if (
+                $r.path -and
+                (-not $beforeRegSet.ContainsKey($r.path))
+              ) {
+                $registryChanges += $r
+              }
+            }
+
+            return [ordered]@{
+              iteration = $iteration
+
+              launch = [ordered]@{
+                started = $true
+                pid = $pid
+                start_time = $launchTime.ToString("o")
+              }
+
+              lifecycle = [ordered]@{
+                alive_observed = $aliveObserved
+                has_exited = $hasExited
+                exit_code = $exitCode
+                normal_exit = (
+                  $hasExited -and
+                  ($exitCode -eq 0)
+                )
+                observation_ms = $sw.ElapsedMilliseconds
+              }
+
+              samples = @($samples)
+
+              final_snapshot = $finalSnapshot
+
+              children = @($children)
+
+              network = @($network)
+
+              file_changes = @($fileChanges)
+
+              registry_changes = @($registryChanges)
+
+              application_events = @($applicationEvents)
+            }
+          }
+
+          # ------------------------------------------------------
+          # PE metadata on Windows
+          # ------------------------------------------------------
+
+          $auth = $null
+
+          try {
+            $auth = Get-AuthenticodeSignature $exePath |
+              Select-Object Status, StatusMessage, SignerCertificate
+          }
+          catch {}
+
+          $peWindows = [ordered]@{
+            path = $exePath
+            size = $exe.Length
+            sha256 = (
+              Get-FileHash $exePath -Algorithm SHA256
+            ).Hash
+            authenticode = $auth
+          }
+
+          # ------------------------------------------------------
+          # Environment
+          # ------------------------------------------------------
+
+          $environment = [ordered]@{
+            os = (Get-CimInstance Win32_OperatingSystem |
+              Select-Object Caption, Version, BuildNumber)
+            powershell = $PSVersionTable.PSVersion.ToString()
+            architecture = $env:PROCESSOR_ARCHITECTURE
+            processor_count = $env:NUMBER_OF_PROCESSORS
+            machine = $env:COMPUTERNAME
+          }
+
+          # ------------------------------------------------------
+          # Repeated launch testing
+          # ------------------------------------------------------
+
+          $runs = @()
+
+          for ($i = 1; $i -le 5; $i++) {
+
+            try {
+              $runs += Run-One $i
+            }
+            catch {
+
+              $runs += [ordered]@{
+                iteration = $i
+                harness_error = $_.Exception.Message
+                harness_error_type = $_.Exception.GetType().FullName
+              }
+            }
+
+            Start-Sleep -Milliseconds 500
+          }
+
+          # ------------------------------------------------------
+          # Concurrent launch test
+          # ------------------------------------------------------
+
+          $concurrent = @()
+
+          $procs = @()
+
+          for ($i = 1; $i -le 3; $i++) {
+
+            try {
+              $start = [DateTime]::UtcNow
+
+              $cp = Start-Process `
+                -FilePath $exePath `
+                -PassThru `
+                -WorkingDirectory $root
+
+              $procs += [ordered]@{
+                pid = $cp.Id
+                start = $start.ToString("o")
+              }
+            }
+            catch {
+
+              $concurrent += [ordered]@{
+                start_error = $_.Exception.Message
+              }
+            }
+          }
+
+          Start-Sleep -Milliseconds 500
+
+          foreach ($item in @($procs)) {
+
+            $pid = $item.pid
+
+            $snap = Get-ProcessSnapshotByPid $pid
+
+            $exitCode = $null
+            $hasExited = $null
+
+            try {
+              $p = Get-Process -Id $pid -ErrorAction Stop
+              $hasExited = $p.HasExited
+
+              if ($hasExited) {
+                $exitCode = $p.ExitCode
+              }
+            }
+            catch {
+              $hasExited = $true
+            }
+
+            $concurrent += [ordered]@{
+              pid = $pid
+              snapshot = $snap
+              has_exited = $hasExited
+              exit_code = $exitCode
+            }
+          }
+
+          Start-Sleep -Milliseconds 1000
+
+          foreach ($item in @($procs)) {
+
+            $pid = $item.pid
+
+            try {
+
+              $p = Get-Process -Id $pid -ErrorAction Stop
+
+              if (-not $p.HasExited) {
+                Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+              }
+            }
+            catch {}
+          }
+
+          # ------------------------------------------------------
+          # Final global inventory
+          # ------------------------------------------------------
+
+          $finalInventory = [ordered]@{
+            files = @(Get-FileInventory $root)
+            registry = @(Get-RegistryInventory)
+          }
+
+          # ------------------------------------------------------
+          # Final structured evidence
+          # ------------------------------------------------------
+
+          $evidence = [ordered]@{
+
+            schema = "GOODDAYGOODBAY220_EVIDENCE_V5"
+
+            timestamp_utc = [DateTime]::UtcNow.ToString("o")
+
+            executable = [ordered]@{
+              name = $exe.Name
+              path = $exePath
+              sha256 = (
+                Get-FileHash $exePath -Algorithm SHA256
+              ).Hash
+              size = $exe.Length
+            }
+
+            environment = $environment
+
+            pe = $peWindows
+
+            repeated_launch = @($runs)
+
+            concurrent_launch = @($concurrent)
+
+            final_inventory = $finalInventory
+
+            program_modified = $false
+          }
+
+          $jsonPath = "$root\reports\DEEP_RUNTIME_RESOURCE.json"
+
+          $evidence |
+            ConvertTo-Json -Depth 30 |
+            Set-Content `
+              -Path $jsonPath `
+              -Encoding UTF8
+
+          Copy-Item `
+            $jsonPath `
+            "$env:GITHUB_WORKSPACE\V5\reports\DEEP_RUNTIME_RESOURCE.json" `
+            -Force
+
+      - name: Upload evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: GOODDAYGOODBAY220-V5-EVIDENCE
+          path: V5/reports/DEEP_RUNTIME_RESOURCE.json
+          if-no-files-found: error
