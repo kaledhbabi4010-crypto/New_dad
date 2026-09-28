@@ -1,0 +1,269 @@
+name: GOODDAYGOODBAY220 AUTONOMOUS FINAL FACTORY
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+
+  windows-final:
+
+    runs-on: windows-latest
+
+    steps:
+
+      # ================================================================
+      # CHECKOUT
+      # ================================================================
+
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+
+      - name: Print exact commit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "GITHUB_SHA=$env:GITHUB_SHA"
+          git rev-parse HEAD
+
+      # ================================================================
+      # PYTHON
+      # ================================================================
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # ================================================================
+      # SYSTEM INVENTORY
+      # ================================================================
+
+      - name: Windows and Python inventory
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          Write-Host "Windows:"
+          Get-CimInstance Win32_OperatingSystem |
+            Select-Object Caption,Version,OSArchitecture
+
+          Write-Host ""
+          Write-Host "Python:"
+          python --version
+
+          Write-Host ""
+          Write-Host "Architecture:"
+          python -c "import platform; print(platform.platform()); print(platform.machine())"
+
+      # ================================================================
+      # PRODUCTION COMPILE
+      # ================================================================
+
+      - name: Compile production source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $files = Get-ChildItem `
+            GOODDAYGOOBUY220_FINAL `
+            -Recurse `
+            -Filter *.py
+
+          foreach ($file in $files) {
+
+            if ($file.Name -eq "WINDOWS_AUTONOMOUS_FINAL_BUILDER.py") {
+              continue
+            }
+
+            Write-Host "COMPILE:" $file.FullName
+
+            python -m py_compile "$($file.FullName)"
+
+            if ($LASTEXITCODE -ne 0) {
+              throw "Compile failure: $($file.FullName)"
+            }
+          }
+
+      # ================================================================
+      # REAL IMPORTS
+      # ================================================================
+
+      - name: Real application import test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $env:PYTHONPATH = "$PWD\GOODDAYGOOBUY220_FINAL"
+
+          python -c "import KHALED27_WORKFLOW; print('REAL_IMPORT_PASS:KHALED27_WORKFLOW')"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "KHALED27_WORKFLOW import failed"
+          }
+
+          python -c "import RUN_GOODDAYGOOBUY220; print('REAL_IMPORT_PASS:RUN_GOODDAYGOOBUY220')"
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "RUN_GOODDAYGOOBUY220 import failed"
+          }
+
+      # ================================================================
+      # BUILD
+      # ================================================================
+
+      - name: Autonomous Windows production build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          python GOODDAYGOOBUY220_FINAL\WINDOWS_AUTONOMOUS_FINAL_BUILDER.py
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Autonomous Windows production builder failed."
+          }
+
+      # ================================================================
+      # VERIFY EXE
+      # ================================================================
+
+      - name: Verify PE executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $exe = "WINDOWS_RELEASE\package\GooddayGoodbay220\GooddayGoodbay220.exe"
+
+          if (!(Test-Path $exe)) {
+            throw "Final EXE not found."
+          }
+
+          $bytes = [System.IO.File]::ReadAllBytes(
+            (Resolve-Path $exe)
+          )
+
+          if ($bytes.Length -lt 2) {
+            throw "EXE is empty."
+          }
+
+          if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
+            throw "EXE is not a valid PE MZ executable."
+          }
+
+          $hash = Get-FileHash `
+            $exe `
+            -Algorithm SHA256
+
+          Write-Host "FINAL_EXE_SHA256=$($hash.Hash)"
+
+      # ================================================================
+      # VERIFY ZIP
+      # ================================================================
+
+      - name: Verify ZIP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $zip = "WINDOWS_RELEASE\GooddayGoodbay220.zip"
+
+          if (!(Test-Path $zip)) {
+            throw "Final ZIP not found."
+          }
+
+          $hash = Get-FileHash `
+            $zip `
+            -Algorithm SHA256
+
+          Write-Host "FINAL_ZIP_SHA256=$($hash.Hash)"
+
+          $archive = [System.IO.Compression.ZipFile]::OpenRead(
+            (Resolve-Path $zip)
+          )
+
+          try {
+
+            $expected = "GooddayGoodbay220/GooddayGoodbay220.exe"
+
+            $found = $false
+
+            foreach ($entry in $archive.Entries) {
+
+              Write-Host $entry.FullName
+
+              if ($entry.FullName -eq $expected) {
+                $found = $true
+              }
+            }
+
+            if (!$found) {
+              throw "EXE missing from final ZIP."
+            }
+
+          }
+          finally {
+
+            $archive.Dispose()
+
+          }
+
+      # ================================================================
+      # FINAL EVIDENCE
+      # ================================================================
+
+      - name: Final evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $exe = "WINDOWS_RELEASE\package\GooddayGoodbay220\GooddayGoodbay220.exe"
+          $zip = "WINDOWS_RELEASE\GooddayGoodbay220.zip"
+
+          $exeHash = (
+            Get-FileHash `
+              $exe `
+              -Algorithm SHA256
+          ).Hash
+
+          $zipHash = (
+            Get-FileHash `
+              $zip `
+              -Algorithm SHA256
+          ).Hash
+
+          @"
+          GOODDAYGOODBAY220 FINAL WINDOWS EVIDENCE
+
+          PRODUCT=GooddayGoodbay220
+          SOURCE_COMMIT=$env:GITHUB_SHA
+          RUNNER_OS=$env:RUNNER_OS
+          RUNNER_ARCH=$env:RUNNER_ARCH
+
+          EXE_SHA256=$exeHash
+          ZIP_SHA256=$zipHash
+
+          STATUS=WINDOWS_PACKAGE_BUILT_AND_VERIFIED
+          "@ |
+          Out-File `
+            WINDOWS_RELEASE\GITHUB_FINAL_EVIDENCE.txt `
+            -Encoding utf8
+
+      # ================================================================
+      # ARTIFACT
+      # ================================================================
+
+      - name: Upload final package
+        uses: actions/upload-artifact@v4
+        with:
+          name: GooddayGoodbay220-AUTONOMOUS-FINAL
+          path: |
+            WINDOWS_RELEASE/GooddayGoodbay220.zip
+            WINDOWS_RELEASE/package/GooddayGoodbay220/GooddayGoodbay220.exe
+            WINDOWS_RELEASE/package/GooddayGoodbay220/BUILD_EVIDENCE.json
+            WINDOWS_RELEASE/FINAL_WINDOWS_EVIDENCE.json
+            WINDOWS_RELEASE/GITHUB_FINAL_EVIDENCE.txt
+            WINDOWS_RELEASE/BUILD_ATTEMPTS.json
+          if-no-files-found: error
