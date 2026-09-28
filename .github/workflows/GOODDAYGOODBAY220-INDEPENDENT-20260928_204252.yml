@@ -1,0 +1,137 @@
+name: GOODDAYGOODBAY220-INDEPENDENT-20260928_204252
+
+on:
+  workflow_dispatch:
+
+jobs:
+  independent:
+    runs-on: windows-latest
+
+    steps:
+
+      - name: Prepare
+        shell: cmd
+        run: |
+          mkdir "%GITHUB_WORKSPACE%\INDEPENDENT"
+          mkdir "%GITHUB_WORKSPACE%\INDEPENDENT\logs"
+          mkdir "%GITHUB_WORKSPACE%\INDEPENDENT\reports"
+
+      - name: Download exact EXE
+        shell: cmd
+        run: |
+          curl.exe -L --fail --retry 3 ^
+            -o "%GITHUB_WORKSPACE%\INDEPENDENT\GooddayGoodbay220.exe" ^
+            "https://raw.githubusercontent.com/kaledhbabi4010-crypto/New_dad/main/GOODDAYGOODBAY220_FINAL/RELEASE/GooddayGoodbay220.exe"
+
+      - name: Verify SHA256
+        shell: powershell
+        run: |
+          $p = "$env:GITHUB_WORKSPACE\INDEPENDENT\GooddayGoodbay220.exe"
+          $h = (Get-FileHash $p -Algorithm SHA256).Hash.ToLower()
+          $expected = "2d59428f34a9e613c51b0b770e6839e85abb5ecd9efbf3d9a6cf2e8edc28c350"
+          "SHA256=$h" | Set-Content "$env:GITHUB_WORKSPACE\INDEPENDENT\reports\sha256.txt"
+          if ($h -ne $expected) {
+            Write-Host "PROGRAM_HASH_MISMATCH"
+            exit 20
+          }
+          Write-Host "PROGRAM_HASH_MATCH"
+
+      - name: Direct CMD execution
+        shell: cmd
+        continue-on-error: true
+        run: |
+          cd /d "%GITHUB_WORKSPACE%\INDEPENDENT"
+          echo ===== DIRECT EXECUTION ===== > logs\direct.txt
+          echo START=%DATE% %TIME% >> logs\direct.txt
+          GooddayGoodbay220.exe >> logs\direct_stdout.txt 2>> logs\direct_stderr.txt
+          echo EXIT_CODE=%ERRORLEVEL% >> logs\direct.txt
+          echo END=%DATE% %TIME% >> logs\direct.txt
+
+      - name: Help execution
+        shell: cmd
+        continue-on-error: true
+        run: |
+          cd /d "%GITHUB_WORKSPACE%\INDEPENDENT"
+          GooddayGoodbay220.exe --help > logs\help_stdout.txt 2> logs\help_stderr.txt
+          echo EXIT_CODE=%ERRORLEVEL% > logs\help_exit.txt
+
+      - name: Version execution
+        shell: cmd
+        continue-on-error: true
+        run: |
+          cd /d "%GITHUB_WORKSPACE%\INDEPENDENT"
+          GooddayGoodbay220.exe --version > logs\version_stdout.txt 2> logs\version_stderr.txt
+          echo EXIT_CODE=%ERRORLEVEL% > logs\version_exit.txt
+
+      - name: Repeated direct execution
+        shell: cmd
+        continue-on-error: true
+        run: |
+          cd /d "%GITHUB_WORKSPACE%\INDEPENDENT"
+
+          echo RUN_1 > logs\repeat.txt
+          GooddayGoodbay220.exe >> logs\repeat_stdout_1.txt 2>> logs\repeat_stderr_1.txt
+          echo EXIT_CODE=%ERRORLEVEL% >> logs\repeat.txt
+
+          echo RUN_2 >> logs\repeat.txt
+          GooddayGoodbay220.exe >> logs\repeat_stdout_2.txt 2>> logs\repeat_stderr_2.txt
+          echo EXIT_CODE=%ERRORLEVEL% >> logs\repeat.txt
+
+          echo RUN_3 >> logs\repeat.txt
+          GooddayGoodbay220.exe >> logs\repeat_stdout_3.txt 2>> logs\repeat_stderr_3.txt
+          echo EXIT_CODE=%ERRORLEVEL% >> logs\repeat.txt
+
+      - name: Collect raw Windows facts
+        shell: powershell
+        continue-on-error: true
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\INDEPENDENT"
+          $exe = "$root\GooddayGoodbay220.exe"
+
+          $facts = [ordered]@{
+            timestamp_utc = [DateTime]::UtcNow.ToString("o")
+            computer = $env:COMPUTERNAME
+            os = (Get-CimInstance Win32_OperatingSystem).Caption
+            os_version = (Get-CimInstance Win32_OperatingSystem).Version
+            powershell = $PSVersionTable.PSVersion.ToString()
+            exe_path = $exe
+            exe_exists = Test-Path $exe
+            exe_size = (Get-Item $exe).Length
+            exe_sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash
+            processor = $env:PROCESSOR_IDENTIFIER
+          }
+
+          $facts |
+            ConvertTo-Json -Depth 10 |
+            Set-Content "$root\reports\windows_facts.json" -Encoding UTF8
+
+      - name: Package raw evidence
+        if: always()
+        shell: powershell
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\INDEPENDENT"
+
+          $manifest = [ordered]@{
+            generated_utc = [DateTime]::UtcNow.ToString("o")
+            test = "GOODDAYGOODBAY220-INDEPENDENT"
+            exe_sha256_expected = "2d59428f34a9e613c51b0b770e6839e85abb5ecd9efbf3d9a6cf2e8edc28c350"
+            files = @(Get-ChildItem $root -Recurse -File |
+              ForEach-Object {
+                [ordered]@{
+                  path = $_.FullName.Substring($root.Length).TrimStart('\')
+                  size = $_.Length
+                }
+              })
+          }
+
+          $manifest |
+            ConvertTo-Json -Depth 20 |
+            Set-Content "$root\reports\manifest.json" -Encoding UTF8
+
+      - name: Upload independent evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GOODDAYGOODBAY220-INDEPENDENT-EVIDENCE
+          path: ${{ github.workspace }}\INDEPENDENT
+          if-no-files-found: error
