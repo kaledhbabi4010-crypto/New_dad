@@ -1,0 +1,419 @@
+name: GooddayGoodbay220 Real Windows Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-real-test:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Windows environment evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          New-Item -ItemType Directory -Force -Path test-evidence | Out-Null
+
+          "===== WINDOWS ENVIRONMENT =====" | Tee-Object test-evidence/environment.txt
+          Get-ComputerInfo |
+            Select-Object WindowsProductName,
+                          WindowsVersion,
+                          OsBuildNumber,
+                          OsArchitecture |
+            Format-List |
+            Out-File test-evidence/environment.txt -Append
+
+          "===== POWERSHELL =====" | Out-File test-evidence/environment.txt -Append
+          $PSVersionTable | Out-File test-evidence/environment.txt -Append
+
+          "===== .NET =====" | Out-File test-evidence/environment.txt -Append
+          dotnet --info 2>&1 | Out-File test-evidence/environment.txt -Append
+
+          "===== SYSTEM =====" | Out-File test-evidence/environment.txt -Append
+          systeminfo | Out-File test-evidence/environment.txt -Append
+
+      - name: Locate real EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $exe = Get-ChildItem `
+            -Path . `
+            -Filter "GooddayGoodbay220.exe" `
+            -File `
+            -Recurse |
+            Select-Object -First 1
+
+          if (-not $exe) {
+            throw "GooddayGoodbay220.exe was not found."
+          }
+
+          "EXE=$($exe.FullName)" |
+            Out-File test-evidence/exe-location.txt
+
+          "SIZE=$($exe.Length)" |
+            Out-File test-evidence/exe-location.txt -Append
+
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash
+
+          "SHA256=$hash" |
+            Out-File test-evidence/exe-location.txt -Append
+
+          "MZ_HEADER=$([System.Text.Encoding]::ASCII.GetString([System.IO.File]::ReadAllBytes($exe.FullName)[0..1]))" |
+            Out-File test-evidence/exe-location.txt -Append
+
+      - name: Static Windows executable inspection
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $exe = Get-ChildItem `
+            -Path . `
+            -Filter "GooddayGoodbay220.exe" `
+            -File `
+            -Recurse |
+            Select-Object -First 1
+
+          if (-not $exe) {
+            throw "EXE not found."
+          }
+
+          $info = Get-Item $exe.FullName
+
+          "===== FILE =====" |
+            Out-File test-evidence/static-inspection.txt
+
+          $info |
+            Format-List * |
+            Out-File test-evidence/static-inspection.txt -Append
+
+          "===== VERSION =====" |
+            Out-File test-evidence/static-inspection.txt -Append
+
+          $info.VersionInfo |
+            Format-List * |
+            Out-File test-evidence/static-inspection.txt -Append
+
+          "===== AUTHENTICODE =====" |
+            Out-File test-evidence/static-inspection.txt -Append
+
+          Get-AuthenticodeSignature $exe.FullName |
+            Format-List * |
+            Out-File test-evidence/static-inspection.txt -Append
+
+      - name: Runtime test — normal launch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $exe = Get-ChildItem `
+            -Path . `
+            -Filter "GooddayGoodbay220.exe" `
+            -File `
+            -Recurse |
+            Select-Object -First 1
+
+          if (-not $exe) {
+            throw "EXE not found."
+          }
+
+          $log = "test-evidence/runtime-normal.txt"
+
+          "===== REAL WINDOWS RUNTIME TEST =====" |
+            Out-File $log
+
+          "UTC=$([DateTime]::UtcNow.ToString("o"))" |
+            Out-File $log -Append
+
+          "EXE=$($exe.FullName)" |
+            Out-File $log -Append
+
+          $stdout = Join-Path $PWD "test-evidence/stdout-normal.txt"
+          $stderr = Join-Path $PWD "test-evidence/stderr-normal.txt"
+
+          Remove-Item $stdout,$stderr -ErrorAction SilentlyContinue
+
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+
+          try {
+
+            $p = Start-Process `
+              -FilePath $exe.FullName `
+              -WorkingDirectory $exe.DirectoryName `
+              -RedirectStandardOutput $stdout `
+              -RedirectStandardError $stderr `
+              -PassThru
+
+            "PID=$($p.Id)" |
+              Out-File $log -Append
+
+            $timeoutSeconds = 60
+
+            $finished = $p.WaitForExit($timeoutSeconds * 1000)
+
+            $sw.Stop()
+
+            if (-not $finished) {
+
+              "STATUS=TIMEOUT" |
+                Out-File $log -Append
+
+              "TIMEOUT_SECONDS=$timeoutSeconds" |
+                Out-File $log -Append
+
+              try {
+                Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+              } catch {}
+
+              exit 124
+            }
+
+            "STATUS=EXITED" |
+              Out-File $log -Append
+
+            "EXIT_CODE=$($p.ExitCode)" |
+              Out-File $log -Append
+
+            "DURATION_SECONDS=$([Math]::Round($sw.Elapsed.TotalSeconds,3))" |
+              Out-File $log -Append
+
+            if (Test-Path $stdout) {
+              "===== STDOUT =====" |
+                Out-File $log -Append
+              Get-Content $stdout |
+                Out-File $log -Append
+            }
+
+            if (Test-Path $stderr) {
+              "===== STDERR =====" |
+                Out-File $log -Append
+              Get-Content $stderr |
+                Out-File $log -Append
+            }
+
+            # Exit code is evidence.
+            # Zero = runtime PASS.
+            # Non-zero = runtime FAIL.
+            if ($p.ExitCode -ne 0) {
+              exit $p.ExitCode
+            }
+
+          } catch {
+
+            $_ | Out-String |
+              Out-File $log -Append
+
+            exit 1
+          }
+
+      - name: Runtime test — --help
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $exe = Get-ChildItem `
+            -Path . `
+            -Filter "GooddayGoodbay220.exe" `
+            -File `
+            -Recurse |
+            Select-Object -First 1
+
+          if (-not $exe) {
+            throw "EXE not found."
+          }
+
+          $stdout = "test-evidence/stdout-help.txt"
+          $stderr = "test-evidence/stderr-help.txt"
+          $log = "test-evidence/runtime-help.txt"
+
+          $p = Start-Process `
+            -FilePath $exe.FullName `
+            -ArgumentList "--help" `
+            -WorkingDirectory $exe.DirectoryName `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr `
+            -PassThru
+
+          $finished = $p.WaitForExit(30000)
+
+          if (-not $finished) {
+
+            "STATUS=TIMEOUT" |
+              Out-File $log
+
+            try {
+              Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            } catch {}
+
+            exit 124
+          }
+
+          "STATUS=EXITED" |
+            Out-File $log
+
+          "EXIT_CODE=$($p.ExitCode)" |
+            Out-File $log -Append
+
+          if (Test-Path $stdout) {
+            "===== STDOUT =====" |
+              Out-File $log -Append
+            Get-Content $stdout |
+              Out-File $log -Append
+          }
+
+          if (Test-Path $stderr) {
+            "===== STDERR =====" |
+              Out-File $log -Append
+            Get-Content $stderr |
+              Out-File $log -Append
+          }
+
+      - name: Runtime test — --version
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $exe = Get-ChildItem `
+            -Path . `
+            -Filter "GooddayGoodbay220.exe" `
+            -File `
+            -Recurse |
+            Select-Object -First 1
+
+          if (-not $exe) {
+            throw "EXE not found."
+          }
+
+          $stdout = "test-evidence/stdout-version.txt"
+          $stderr = "test-evidence/stderr-version.txt"
+          $log = "test-evidence/runtime-version.txt"
+
+          $p = Start-Process `
+            -FilePath $exe.FullName `
+            -ArgumentList "--version" `
+            -WorkingDirectory $exe.DirectoryName `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr `
+            -PassThru
+
+          $finished = $p.WaitForExit(30000)
+
+          if (-not $finished) {
+
+            "STATUS=TIMEOUT" |
+              Out-File $log
+
+            try {
+              Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            } catch {}
+
+            exit 124
+          }
+
+          "STATUS=EXITED" |
+            Out-File $log
+
+          "EXIT_CODE=$($p.ExitCode)" |
+            Out-File $log -Append
+
+          if (Test-Path $stdout) {
+            "===== STDOUT =====" |
+              Out-File $log -Append
+            Get-Content $stdout |
+              Out-File $log -Append
+          }
+
+          if (Test-Path $stderr) {
+            "===== STDERR =====" |
+              Out-File $log -Append
+            Get-Content $stderr |
+              Out-File $log -Append
+          }
+
+      - name: Process and system evidence
+        shell: pwsh
+        if: always()
+        run: |
+          Get-Process |
+            Sort-Object CPU -Descending |
+            Select-Object -First 50 |
+            Format-Table -AutoSize |
+            Out-File test-evidence/processes.txt
+
+          Get-PSDrive |
+            Format-Table -AutoSize |
+            Out-File test-evidence/drives.txt
+
+          Get-CimInstance Win32_OperatingSystem |
+            Format-List * |
+            Out-File test-evidence/windows-final-state.txt
+
+      - name: Build machine-readable verdict
+        shell: pwsh
+        if: always()
+        run: |
+          $exe = Get-ChildItem `
+            -Path . `
+            -Filter "GooddayGoodbay220.exe" `
+            -File `
+            -Recurse |
+            Select-Object -First 1
+
+          $hash = $null
+
+          if ($exe) {
+            $hash = (Get-FileHash `
+              $exe.FullName `
+              -Algorithm SHA256).Hash
+          }
+
+          $normalLog = "test-evidence/runtime-normal.txt"
+
+          $status = "NOT_PROVEN"
+
+          if (Test-Path $normalLog) {
+
+            $content = Get-Content $normalLog -Raw
+
+            if ($content -match "STATUS=TIMEOUT") {
+              $status = "TIMEOUT"
+            }
+            elseif ($content -match "EXIT_CODE=0") {
+              $status = "PASS"
+            }
+            elseif ($content -match "EXIT_CODE=") {
+              $status = "FAIL"
+            }
+          }
+
+          $result = [ordered]@{
+            timestamp_utc = [DateTime]::UtcNow.ToString("o")
+            runner = "GitHub Actions windows-latest"
+            operating_system = [System.Environment]::OSVersion.VersionString
+            executable_found = [bool]$exe
+            executable_path = if ($exe) { $exe.FullName } else { $null }
+            executable_size = if ($exe) { $exe.Length } else { $null }
+            sha256 = $hash
+            normal_runtime_status = $status
+            autodesk_tested = $false
+            note = "This workflow tests Windows execution only. Autodesk integration requires a real Autodesk environment."
+          }
+
+          $result |
+            ConvertTo-Json -Depth 10 |
+            Out-File test-evidence/WINDOWS_REAL_TEST_RESULT.json
+
+      - name: Upload Windows evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GooddayGoodbay220-Windows-Real-Test
+          path: test-evidence
+          if-no-files-found: warn
