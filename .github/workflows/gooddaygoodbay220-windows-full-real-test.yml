@@ -1,0 +1,1157 @@
+
+name: GooddayGoodbay220 Windows Full Real Test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-real-full-test:
+
+    runs-on: windows-latest
+
+    timeout-minutes: 25
+
+    steps:
+
+      # ======================================================
+      # SOURCE
+      # ======================================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ======================================================
+      # CREATE EVIDENCE DIRECTORY
+      # ======================================================
+
+      - name: Initialize evidence
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\evidence" | Out-Null
+
+          @"
+          GOODDAYGOODBAY220 WINDOWS REAL FULL TEST
+          Started: $(Get-Date -Format o)
+          Runner: $env:RUNNER_NAME
+          OS: $env:RUNNER_OS
+          "@ | Out-File "$env:GITHUB_WORKSPACE\evidence\START.txt"
+
+      # ======================================================
+      # WINDOWS ENVIRONMENT
+      # ======================================================
+
+      - name: Windows environment evidence
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          systeminfo |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\systeminfo.txt"
+
+          Get-ComputerInfo |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\computerinfo.txt"
+
+          $env:Path |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\PATH.txt"
+
+          Get-Process |
+            Sort-Object ProcessName |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\processes-before.txt"
+
+      # ======================================================
+      # LOCATE REAL EXE
+      # ======================================================
+
+      - name: Locate real EXE
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $files = Get-ChildItem `
+            -Path "$env:GITHUB_WORKSPACE" `
+            -Recurse `
+            -File `
+            -Filter "*.exe" |
+            Where-Object {
+              $_.Name -ieq "GooddayGoodbay220.exe"
+            }
+
+          if ($files.Count -eq 0) {
+            throw "GooddayGoodbay220.exe was not found."
+          }
+
+          $exe = $files[0].FullName
+
+          "EXE=$exe" |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\exe-location.txt"
+
+          Write-Host "REAL EXE:"
+          Write-Host $exe
+
+      # ======================================================
+      # SHA256 / PE
+      # ======================================================
+
+      - name: EXE integrity and PE validation
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $exe = Get-Content "$env:GITHUB_WORKSPACE\evidence\exe-location.txt" |
+            Select-String "^EXE=" |
+            ForEach-Object { $_.Line.Substring(4) }
+
+          $hash = Get-FileHash $exe -Algorithm SHA256
+
+          $item = Get-Item $exe
+
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+
+          $mz = $false
+
+          if ($bytes.Length -ge 2) {
+            if ($bytes[0] -eq 0x4D -and $bytes[1] -eq 0x5A) {
+              $mz = $true
+            }
+          }
+
+          $obj = [ordered]@{
+            path = $exe
+            size = $item.Length
+            sha256 = $hash.Hash
+            pe_mz = $mz
+            extension = $item.Extension
+            last_write = $item.LastWriteTime.ToString("o")
+          }
+
+          $obj |
+            ConvertTo-Json -Depth 10 |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\exe-integrity.json"
+
+          if (-not $mz) {
+            throw "The EXE does not contain a valid MZ header."
+          }
+
+      # ======================================================
+      # VERSION INFORMATION
+      # ======================================================
+
+      - name: Windows executable metadata
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $exe = Get-Content "$env:GITHUB_WORKSPACE\evidence\exe-location.txt" |
+            Select-String "^EXE=" |
+            ForEach-Object { $_.Line.Substring(4) }
+
+          $item = Get-Item $exe
+
+          $info = [ordered]@{
+            FullName = $item.FullName
+            Length = $item.Length
+            CreationTime = $item.CreationTime.ToString("o")
+            LastWriteTime = $item.LastWriteTime.ToString("o")
+            ProductName = $item.VersionInfo.ProductName
+            ProductVersion = $item.VersionInfo.ProductVersion
+            FileDescription = $item.VersionInfo.FileDescription
+            CompanyName = $item.VersionInfo.CompanyName
+            OriginalFilename = $item.VersionInfo.OriginalFilename
+            InternalName = $item.VersionInfo.InternalName
+            FileVersion = $item.VersionInfo.FileVersion
+          }
+
+          $info |
+            ConvertTo-Json -Depth 10 |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\version-info.json"
+
+      # ======================================================
+      # AUTHENTICODE
+      # ======================================================
+
+      - name: Authenticode inspection
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $exe = Get-Content "$env:GITHUB_WORKSPACE\evidence\exe-location.txt" |
+            Select-String "^EXE=" |
+            ForEach-Object { $_.Line.Substring(4) }
+
+          $sig = Get-AuthenticodeSignature $exe
+
+          $obj = [ordered]@{
+            Status = "$($sig.Status)"
+            StatusMessage = "$($sig.StatusMessage)"
+            SignerCertificate = if ($sig.SignerCertificate) {
+              "$($sig.SignerCertificate.Subject)"
+            } else {
+              $null
+            }
+          }
+
+          $obj |
+            ConvertTo-Json -Depth 10 |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\authenticode.json"
+
+      # ======================================================
+      # INSTALLER DETECTION
+      # ======================================================
+
+      - name: Detect installer type
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $exe = Get-Content "$env:GITHUB_WORKSPACE\evidence\exe-location.txt" |
+            Select-String "^EXE=" |
+            ForEach-Object { $_.Line.Substring(4) }
+
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+
+          $text = [System.Text.Encoding]::ASCII.GetString($bytes)
+
+          $patterns = [ordered]@{
+            NSIS = @(
+              "Nullsoft",
+              "NSIS"
+            )
+            InnoSetup = @(
+              "Inno Setup",
+              "InnoSetup"
+            )
+            InstallShield = @(
+              "InstallShield"
+            )
+            Squirrel = @(
+              "Squirrel"
+            )
+            MSI = @(
+              "Windows Installer"
+            )
+          }
+
+          $matches = @()
+
+          foreach ($framework in $patterns.Keys) {
+            foreach ($p in $patterns[$framework]) {
+              if ($text.Contains($p)) {
+                $matches += $framework
+                break
+              }
+            }
+          }
+
+          $description = ""
+
+          if ($item = Get-Item $exe) {
+            $description = @(
+              $item.VersionInfo.ProductName
+              $item.VersionInfo.FileDescription
+              $item.VersionInfo.OriginalFilename
+            ) -join " "
+          }
+
+          $isInstaller = $false
+
+          if ($matches.Count -gt 0) {
+            $isInstaller = $true
+          }
+
+          if (
+            $description -match `
+            "(?i)setup|installer|install|uninstall"
+          ) {
+            $isInstaller = $true
+          }
+
+          $type = if ($isInstaller) {
+            "INSTALLER_CANDIDATE"
+          } else {
+            "PORTABLE_OR_UNKNOWN"
+          }
+
+          $result = [ordered]@{
+            type = $type
+            frameworks_detected = @($matches | Select-Object -Unique)
+            metadata = $description
+            evidence_based = $true
+          }
+
+          $result |
+            ConvertTo-Json -Depth 10 |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\installer-detection.json"
+
+          Write-Host "Detected type: $type"
+
+      # ======================================================
+      # PRE-INSTALL STATE
+      # ======================================================
+
+      - name: Capture pre-install state
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $state = [ordered]@{}
+
+          $state.desktop = @(
+            Get-ChildItem `
+              "$env:USERPROFILE\Desktop" `
+              -ErrorAction SilentlyContinue |
+              Select-Object FullName,Name
+          )
+
+          $state.startmenu = @(
+            Get-ChildItem `
+              "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" `
+              -Recurse `
+              -ErrorAction SilentlyContinue |
+              Select-Object FullName,Name
+          )
+
+          $uninstallPaths = @(
+            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+          )
+
+          $uninstall = @()
+
+          foreach ($p in $uninstallPaths) {
+            $uninstall += Get-ItemProperty `
+              $p `
+              -ErrorAction SilentlyContinue |
+              Select-Object `
+                DisplayName,
+                DisplayVersion,
+                InstallLocation,
+                UninstallString,
+                QuietUninstallString
+          }
+
+          $state.uninstall_registry = $uninstall
+
+          $state |
+            ConvertTo-Json -Depth 20 |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\state-before.json"
+
+      # ======================================================
+      # NORMAL EXE RUNTIME TEST
+      # ======================================================
+
+      - name: Portable or raw executable runtime test
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $det = Get-Content `
+            "$env:GITHUB_WORKSPACE\evidence\installer-detection.json" |
+            ConvertFrom-Json
+
+          if ($det.type -eq "INSTALLER_CANDIDATE") {
+            Write-Host "Installer candidate detected."
+            Write-Host "Raw executable launch is deferred to installer stage."
+            exit 0
+          }
+
+          $exe = Get-Content "$env:GITHUB_WORKSPACE\evidence\exe-location.txt" |
+            Select-String "^EXE=" |
+            ForEach-Object { $_.Line.Substring(4) }
+
+          $stdout = "$env:GITHUB_WORKSPACE\evidence\portable-stdout.txt"
+          $stderr = "$env:GITHUB_WORKSPACE\evidence\portable-stderr.txt"
+
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+
+          $p = Start-Process `
+            -FilePath $exe `
+            -WorkingDirectory (Split-Path $exe) `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr `
+            -PassThru
+
+          $finished = $p.WaitForExit(60000)
+
+          $sw.Stop()
+
+          if (-not $finished) {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+
+            $result = [ordered]@{
+              mode = "PORTABLE"
+              result = "TIMEOUT"
+              pid = $p.Id
+              duration_ms = $sw.ElapsedMilliseconds
+            }
+
+            $result |
+              ConvertTo-Json |
+              Out-File "$env:GITHUB_WORKSPACE\evidence\runtime.json"
+
+            throw "Portable executable did not exit within 60 seconds."
+          }
+
+          $result = [ordered]@{
+            mode = "PORTABLE"
+            result = if ($p.ExitCode -eq 0) { "PASS" } else { "FAIL" }
+            pid = $p.Id
+            exit_code = $p.ExitCode
+            duration_ms = $sw.ElapsedMilliseconds
+          }
+
+          $result |
+            ConvertTo-Json |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\runtime.json"
+
+          if ($p.ExitCode -ne 0) {
+            throw "Portable executable returned exit code $($p.ExitCode)."
+          }
+
+      # ======================================================
+      # INSTALLER EXECUTION
+      # ======================================================
+
+      - name: Real installer execution
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $det = Get-Content `
+            "$env:GITHUB_WORKSPACE\evidence\installer-detection.json" |
+            ConvertFrom-Json
+
+          if ($det.type -ne "INSTALLER_CANDIDATE") {
+            Write-Host "NOT_AN_INSTALLER: skipping installation."
+            exit 0
+          }
+
+          $exe = Get-Content "$env:GITHUB_WORKSPACE\evidence\exe-location.txt" |
+            Select-String "^EXE=" |
+            ForEach-Object { $_.Line.Substring(4) }
+
+          # --------------------------------------------------
+          # IMPORTANT:
+          # Do not blindly invent silent-install switches.
+          # First inspect metadata/help output.
+          # --------------------------------------------------
+
+          $helpFiles = @(
+            "$env:GITHUB_WORKSPACE\evidence\installer-help.txt"
+          )
+
+          $helpArguments = @(
+            "/?",
+            "/help",
+            "-h",
+            "--help"
+          )
+
+          $helpOutput = ""
+
+          foreach ($arg in $helpArguments) {
+
+            try {
+
+              $p = Start-Process `
+                -FilePath $exe `
+                -ArgumentList $arg `
+                -RedirectStandardOutput "$env:TEMP\gdb-help-out.txt" `
+                -RedirectStandardError "$env:TEMP\gdb-help-err.txt" `
+                -PassThru `
+                -WindowStyle Hidden
+
+              $p.WaitForExit(10000) | Out-Null
+
+              $o = ""
+              $e = ""
+
+              if (Test-Path "$env:TEMP\gdb-help-out.txt") {
+                $o = Get-Content `
+                  "$env:TEMP\gdb-help-out.txt" `
+                  -Raw `
+                  -ErrorAction SilentlyContinue
+              }
+
+              if (Test-Path "$env:TEMP\gdb-help-err.txt") {
+                $e = Get-Content `
+                  "$env:TEMP\gdb-help-err.txt" `
+                  -Raw `
+                  -ErrorAction SilentlyContinue
+              }
+
+              $helpOutput += "`nARGUMENT: $arg`n"
+              $helpOutput += $o
+              $helpOutput += "`nSTDERR:`n"
+              $helpOutput += $e
+              $helpOutput += "`n--------------------------------`n"
+
+            } catch {}
+          }
+
+          $helpOutput |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\installer-help.txt"
+
+          # --------------------------------------------------
+          # Detect known safe installer frameworks from bytes.
+          # --------------------------------------------------
+
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          $ascii = [System.Text.Encoding]::ASCII.GetString($bytes)
+
+          $framework = "UNKNOWN"
+
+          if (
+            $ascii.Contains("Nullsoft") -or
+            $ascii.Contains("NSIS")
+          ) {
+            $framework = "NSIS"
+          }
+          elseif (
+            $ascii.Contains("Inno Setup") -or
+            $ascii.Contains("InnoSetup")
+          ) {
+            $framework = "INNO_SETUP"
+          }
+          elseif ($ascii.Contains("InstallShield")) {
+            $framework = "INSTALLSHIELD"
+          }
+          elseif ($ascii.Contains("Squirrel")) {
+            $framework = "SQUIRREL"
+          }
+
+          # --------------------------------------------------
+          # Only known framework switches are used.
+          # --------------------------------------------------
+
+          $arguments = $null
+
+          switch ($framework) {
+
+            "NSIS" {
+              $arguments = @("/S")
+            }
+
+            "INNO_SETUP" {
+              $arguments = @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART")
+            }
+
+            "INSTALLSHIELD" {
+              # No guessed silent command.
+              $arguments = $null
+            }
+
+            "SQUIRREL" {
+              # Squirrel installer syntax varies.
+              $arguments = $null
+            }
+
+            default {
+              $arguments = $null
+            }
+          }
+
+          if ($null -eq $arguments) {
+
+            $result = [ordered]@{
+              result = "INSTALLER_DETECTED_BUT_SAFE_AUTOMATED_SWITCH_NOT_PROVEN"
+              framework = $framework
+              action = "NOT_EXECUTED"
+            }
+
+            $result |
+              ConvertTo-Json -Depth 10 |
+              Out-File "$env:GITHUB_WORKSPACE\evidence\install-result.json"
+
+            Write-Host "Installer detected, but safe unattended installation command was not proven."
+            Write-Host "No unsafe guessed installation command will be executed."
+
+            exit 0
+          }
+
+          $stdout = "$env:GITHUB_WORKSPACE\evidence\install-stdout.txt"
+          $stderr = "$env:GITHUB_WORKSPACE\evidence\install-stderr.txt"
+
+          $sw = [System.Diagnostics.Stopwatch]::StartNew()
+
+          $p = Start-Process `
+            -FilePath $exe `
+            -ArgumentList $arguments `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr `
+            -PassThru `
+            -Wait
+
+          $sw.Stop()
+
+          $result = [ordered]@{
+            result = if ($p.ExitCode -eq 0) { "PASS" } else { "FAIL" }
+            framework = $framework
+            arguments = $arguments
+            exit_code = $p.ExitCode
+            duration_ms = $sw.ElapsedMilliseconds
+          }
+
+          $result |
+            ConvertTo-Json -Depth 10 |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\install-result.json"
+
+          if ($p.ExitCode -ne 0) {
+            throw "Installer returned exit code $($p.ExitCode)."
+          }
+
+      # ======================================================
+      # POST-INSTALL DISCOVERY
+      # ======================================================
+
+      - name: Discover installed application
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $det = Get-Content `
+            "$env:GITHUB_WORKSPACE\evidence\installer-detection.json" |
+            ConvertFrom-Json
+
+          if ($det.type -ne "INSTALLER_CANDIDATE") {
+            Write-Host "Portable/unknown package: installation discovery skipped."
+            exit 0
+          }
+
+          $uninstallPaths = @(
+            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+          )
+
+          $entries = @()
+
+          foreach ($p in $uninstallPaths) {
+            $entries += Get-ItemProperty `
+              $p `
+              -ErrorAction SilentlyContinue |
+              Where-Object {
+                $_.DisplayName -match "(?i)Goodday|Goodbay|KHALED|GQS"
+              } |
+              Select-Object `
+                PSPath,
+                DisplayName,
+                DisplayVersion,
+                InstallLocation,
+                UninstallString,
+                QuietUninstallString
+          }
+
+          $desktop = @(
+            Get-ChildItem `
+              "$env:USERPROFILE\Desktop" `
+              -ErrorAction SilentlyContinue |
+              Where-Object {
+                $_.Name -match "(?i)Goodday|Goodbay|KHALED|GQS"
+              } |
+              Select-Object FullName,Name
+          )
+
+          $startmenu = @(
+            Get-ChildItem `
+              "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" `
+              -Recurse `
+              -ErrorAction SilentlyContinue |
+              Where-Object {
+                $_.Name -match "(?i)Goodday|Goodbay|KHALED|GQS"
+              } |
+              Select-Object FullName,Name
+          )
+
+          $result = [ordered]@{
+            uninstall_entries = @($entries)
+            desktop_shortcuts = @($desktop)
+            startmenu_items = @($startmenu)
+          }
+
+          $result |
+            ConvertTo-Json -Depth 20 |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\installed-discovery.json"
+
+      # ======================================================
+      # LAUNCH INSTALLED PROGRAM
+      # ======================================================
+
+      - name: Launch installed program
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $det = Get-Content `
+            "$env:GITHUB_WORKSPACE\evidence\installer-detection.json" |
+            ConvertFrom-Json
+
+          if ($det.type -ne "INSTALLER_CANDIDATE") {
+            Write-Host "Portable package: launch already tested."
+            exit 0
+          }
+
+          $discPath = "$env:GITHUB_WORKSPACE\evidence\installed-discovery.json"
+
+          if (-not (Test-Path $discPath)) {
+            Write-Host "No discovery file."
+            exit 0
+          }
+
+          $disc = Get-Content $discPath |
+            ConvertFrom-Json
+
+          $candidate = $null
+
+          foreach ($entry in @($disc.uninstall_entries)) {
+
+            if ($entry.InstallLocation) {
+
+              $dir = $entry.InstallLocation
+
+              if (Test-Path $dir) {
+
+                $found = Get-ChildItem `
+                  $dir `
+                  -Recurse `
+                  -File `
+                  -Filter "*.exe" `
+                  -ErrorAction SilentlyContinue |
+                  Where-Object {
+                    $_.Name -ieq "GooddayGoodbay220.exe"
+                  } |
+                  Select-Object -First 1
+
+                if ($found) {
+                  $candidate = $found.FullName
+                  break
+                }
+              }
+            }
+          }
+
+          if (-not $candidate) {
+
+            $result = [ordered]@{
+              result = "INSTALLED_EXECUTABLE_NOT_FOUND"
+            }
+
+            $result |
+              ConvertTo-Json |
+              Out-File "$env:GITHUB_WORKSPACE\evidence\installed-runtime.json"
+
+            Write-Host "Installed executable not found."
+            exit 0
+          }
+
+          $p = Start-Process `
+            -FilePath $candidate `
+            -PassThru
+
+          Start-Sleep -Seconds 10
+
+          $alive = -not $p.HasExited
+
+          $exitCode = $null
+
+          if ($p.HasExited) {
+            $exitCode = $p.ExitCode
+          }
+
+          $result = [ordered]@{
+            result = if ($alive -or $exitCode -eq 0) { "PASS" } else { "FAIL" }
+            executable = $candidate
+            pid = $p.Id
+            alive_after_10s = $alive
+            exit_code = $exitCode
+          }
+
+          $result |
+            ConvertTo-Json |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\installed-runtime.json"
+
+          if ($alive) {
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      # ======================================================
+      # UNINSTALL
+      # ======================================================
+
+      - name: Real uninstall
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $det = Get-Content `
+            "$env:GITHUB_WORKSPACE\evidence\installer-detection.json" |
+            ConvertFrom-Json
+
+          if ($det.type -ne "INSTALLER_CANDIDATE") {
+            Write-Host "Portable/unknown package: no uninstall performed."
+            exit 0
+          }
+
+          $disc = Get-Content `
+            "$env:GITHUB_WORKSPACE\evidence\installed-discovery.json" |
+            ConvertFrom-Json
+
+          $entry = @($disc.uninstall_entries) |
+            Select-Object -First 1
+
+          if (-not $entry) {
+
+            $result = [ordered]@{
+              result = "UNINSTALL_ENTRY_NOT_FOUND"
+            }
+
+            $result |
+              ConvertTo-Json |
+              Out-File "$env:GITHUB_WORKSPACE\evidence\uninstall-result.json"
+
+            Write-Host "No registered uninstaller was found."
+            exit 0
+          }
+
+          $command = $entry.QuietUninstallString
+
+          if (-not $command) {
+            $command = $entry.UninstallString
+          }
+
+          if (-not $command) {
+
+            $result = [ordered]@{
+              result = "UNINSTALL_COMMAND_NOT_FOUND"
+            }
+
+            $result |
+              ConvertTo-Json |
+              Out-File "$env:GITHUB_WORKSPACE\evidence\uninstall-result.json"
+
+            Write-Host "No uninstall command found."
+            exit 0
+          }
+
+          "UNINSTALL_COMMAND=$command" |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\uninstall-command.txt"
+
+          Write-Host "Registered uninstall command found."
+          Write-Host $command
+
+          # --------------------------------------------------
+          # Execute the REGISTERED uninstaller.
+          # No manual deletion is used as uninstall.
+          # --------------------------------------------------
+
+          $start = Get-Date
+
+          try {
+
+            $p = Start-Process `
+              -FilePath "cmd.exe" `
+              -ArgumentList "/c", $command `
+              -PassThru `
+              -Wait
+
+            $code = $p.ExitCode
+
+          } catch {
+
+            $code = -999
+
+            $_ |
+              Out-File "$env:GITHUB_WORKSPACE\evidence\uninstall-exception.txt"
+          }
+
+          $duration = ((Get-Date) - $start).TotalMilliseconds
+
+          $result = [ordered]@{
+            result = if ($code -eq 0) { "PASS" } else { "FAIL_OR_REQUIRES_INTERACTION" }
+            exit_code = $code
+            duration_ms = [int]$duration
+            uninstall_command = $command
+          }
+
+          $result |
+            ConvertTo-Json -Depth 10 |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\uninstall-result.json"
+
+      # ======================================================
+      # VERIFY CLEANUP
+      # ======================================================
+
+      - name: Verify uninstall cleanup
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $result = [ordered]@{}
+
+          $det = Get-Content `
+            "$env:GITHUB_WORKSPACE\evidence\installer-detection.json" |
+            ConvertFrom-Json
+
+          if ($det.type -ne "INSTALLER_CANDIDATE") {
+
+            $result.mode = "PORTABLE"
+            $result.result = "NOT_APPLICABLE"
+
+            $result |
+              ConvertTo-Json |
+              Out-File "$env:GITHUB_WORKSPACE\evidence\cleanup-result.json"
+
+            exit 0
+          }
+
+          # -----------------------------------------------
+          # Registry
+          # -----------------------------------------------
+
+          $paths = @(
+            "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*",
+            "HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
+          )
+
+          $remaining = @()
+
+          foreach ($path in $paths) {
+
+            $remaining += Get-ItemProperty `
+              $path `
+              -ErrorAction SilentlyContinue |
+              Where-Object {
+                $_.DisplayName -match "(?i)Goodday|Goodbay|KHALED|GQS"
+              }
+          }
+
+          # -----------------------------------------------
+          # Running processes
+          # -----------------------------------------------
+
+          $running = Get-Process `
+            -ErrorAction SilentlyContinue |
+            Where-Object {
+              $_.ProcessName -match "(?i)Goodday|Goodbay|KHALED|GQS"
+            } |
+            Select-Object Id,ProcessName,Path
+
+          # -----------------------------------------------
+          # Shortcuts
+          # -----------------------------------------------
+
+          $desktop = @(
+            Get-ChildItem `
+              "$env:USERPROFILE\Desktop" `
+              -ErrorAction SilentlyContinue |
+              Where-Object {
+                $_.Name -match "(?i)Goodday|Goodbay|KHALED|GQS"
+              }
+          )
+
+          $startmenu = @(
+            Get-ChildItem `
+              "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" `
+              -Recurse `
+              -ErrorAction SilentlyContinue |
+              Where-Object {
+                $_.Name -match "(?i)Goodday|Goodbay|KHALED|GQS"
+              }
+          )
+
+          $result.registry_remaining = @($remaining)
+          $result.running_processes = @($running)
+          $result.desktop_remaining = @($desktop | Select-Object FullName,Name)
+          $result.startmenu_remaining = @($startmenu | Select-Object FullName,Name)
+
+          $result.registry_clean = ($remaining.Count -eq 0)
+          $result.process_clean = ($running.Count -eq 0)
+          $result.desktop_clean = ($desktop.Count -eq 0)
+          $result.startmenu_clean = ($startmenu.Count -eq 0)
+
+          $result.result = if (
+            $result.registry_clean -and
+            $result.process_clean -and
+            $result.desktop_clean -and
+            $result.startmenu_clean
+          ) {
+            "PASS"
+          } else {
+            "INCOMPLETE_CLEANUP"
+          }
+
+          $result |
+            ConvertTo-Json -Depth 20 |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\cleanup-result.json"
+
+      # ======================================================
+      # FINAL PROCESS SNAPSHOT
+      # ======================================================
+
+      - name: Final process evidence
+        shell: powershell
+        run: |
+          Get-Process |
+            Sort-Object ProcessName |
+            Out-File "$env:GITHUB_WORKSPACE\evidence\processes-after.txt"
+
+      # ======================================================
+      # FINAL MACHINE READABLE VERDICT
+      # ======================================================
+
+      - name: Generate final verdict
+        shell: powershell
+        run: |
+
+          $ErrorActionPreference = "Continue"
+
+          $files = Get-ChildItem `
+            "$env:GITHUB_WORKSPACE\evidence" `
+            -File |
+            Select-Object Name,Length,FullName
+
+          $det = $null
+          $runtime = $null
+          $install = $null
+          $installedRuntime = $null
+          $uninstall = $null
+          $cleanup = $null
+
+          try {
+            $det = Get-Content `
+              "$env:GITHUB_WORKSPACE\evidence\installer-detection.json" |
+              ConvertFrom-Json
+          } catch {}
+
+          try {
+            $runtime = Get-Content `
+              "$env:GITHUB_WORKSPACE\evidence\runtime.json" |
+              ConvertFrom-Json
+          } catch {}
+
+          try {
+            $install = Get-Content `
+              "$env:GITHUB_WORKSPACE\evidence\install-result.json" |
+              ConvertFrom-Json
+          } catch {}
+
+          try {
+            $installedRuntime = Get-Content `
+              "$env:GITHUB_WORKSPACE\evidence\installed-runtime.json" |
+              ConvertFrom-Json
+          } catch {}
+
+          try {
+            $uninstall = Get-Content `
+              "$env:GITHUB_WORKSPACE\evidence\uninstall-result.json" |
+              ConvertFrom-Json
+          } catch {}
+
+          try {
+            $cleanup = Get-Content `
+              "$env:GITHUB_WORKSPACE\evidence\cleanup-result.json" |
+              ConvertFrom-Json
+          } catch {}
+
+          $verdict = "UNKNOWN"
+
+          if ($det.type -eq "PORTABLE_OR_UNKNOWN") {
+
+            if ($runtime.result -eq "PASS") {
+              $verdict = "PASS_WINDOWS_PORTABLE_RUNTIME"
+            }
+            else {
+              $verdict = "FAIL_WINDOWS_PORTABLE_RUNTIME"
+            }
+
+          }
+          elseif ($det.type -eq "INSTALLER_CANDIDATE") {
+
+            if (
+              $install.result -eq
+              "INSTALLER_DETECTED_BUT_SAFE_AUTOMATED_SWITCH_NOT_PROVEN"
+            ) {
+
+              $verdict =
+                "INSTALLER_DETECTED_BUT_INSTALL_NOT_SAFELY_EXECUTED"
+
+            }
+            elseif (
+              $install.result -eq "PASS" -and
+              $installedRuntime.result -eq "PASS" -and
+              $uninstall.result -eq "PASS" -and
+              $cleanup.result -eq "PASS"
+            ) {
+
+              $verdict =
+                "PASS_WINDOWS_INSTALL_RUN_UNINSTALL_CLEANUP"
+
+            }
+            else {
+
+              $verdict =
+                "WINDOWS_INSTALL_UNINSTALL_INCOMPLETE"
+
+            }
+          }
+
+          $final = [ordered]@{
+            project = "GooddayGoodbay220"
+            platform = "Windows"
+            environment = "GitHub-hosted real Windows runner"
+            autocad_test = $false
+            revit_test = $false
+            installer_detection = $det
+            runtime = $runtime
+            install = $install
+            installed_runtime = $installedRuntime
+            uninstall = $uninstall
+            cleanup = $cleanup
+            verdict = $verdict
+            evidence_files = @($files)
+            completed_utc = (Get-Date).ToUniversalTime().ToString("o")
+          }
+
+          $final |
+            ConvertTo-Json -Depth 30 |
+            Out-File `
+              "$env:GITHUB_WORKSPACE\evidence\WINDOWS_FULL_REAL_VERDICT.json"
+
+          Write-Host ""
+          Write-Host "===================================================="
+          Write-Host "FINAL WINDOWS REAL VERDICT"
+          Write-Host "===================================================="
+          Write-Host $verdict
+          Write-Host "===================================================="
+
+      # ======================================================
+      # ZIP EVIDENCE
+      # ======================================================
+
+      - name: Create evidence archive
+        shell: powershell
+        run: |
+          Compress-Archive `
+            -Path "$env:GITHUB_WORKSPACE\evidence\*" `
+            -DestinationPath `
+              "$env:GITHUB_WORKSPACE\GooddayGoodbay220-Windows-Full-Real-Evidence.zip" `
+            -Force
+
+      # ======================================================
+      # UPLOAD EVIDENCE
+      # ======================================================
+
+      - name: Upload Windows full evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: GooddayGoodbay220-Windows-Full-Real-Evidence
+          path: |
+            evidence/**
+            GooddayGoodbay220-Windows-Full-Real-Evidence.zip
+          if-no-files-found: error
