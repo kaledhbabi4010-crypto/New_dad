@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "GOODDAY - Full Audit",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "GOODDAYGOODBAY220_FINAL/LOCAL_VSCODE_AUDIT.py"
+      ],
+      "problemMatcher": []
+    },
+    {
+      "label": "GOODDAY - Compile Production",
+      "type": "shell",
+      "command": "python",
+      "args": [
+        "-m",
+        "compileall",
+        "-q",
+        "GOODDAYGOODBAY220_FINAL"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}
