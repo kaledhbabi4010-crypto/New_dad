@@ -7,12 +7,7 @@
         "ms-python.python",
         "ms-python.vscode-pylance",
         "github.vscode-github-actions"
-      ],
-      "settings": {
-        "python.testing.pytestEnabled": true,
-        "python.analysis.autoImportCompletions": true
-      }
+      ]
     }
-  },
-  "postCreateCommand": "python -m pip install --upgrade pip"
+  }
 }
