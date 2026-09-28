@@ -1,0 +1,39 @@
+{
+  "project": "GooddayGoodbay220",
+  "repository": "kaledhbabi4010-crypto/New_dad",
+  "source_commit": "56f46741654b803e40be0ac9d33b256829dd20de",
+  "entry_candidates": [
+    {
+      "file": "GOODDAYGOOBUY220_FINAL/RUN_GOODDAYGOOBUY220.py",
+      "score": 3,
+      "reasons": [
+        "runner filename"
+      ]
+    },
+    {
+      "file": "GOODDAYGOOBUY220_FINAL/KHALED27_WORKFLOW.py",
+      "score": 2,
+      "reasons": [
+        "workflow filename"
+      ]
+    },
+    {
+      "file": "GOODDAYGOOBUY220_FINAL/KHALED_WORKFLOW_FINAL.py",
+      "score": 2,
+      "reasons": [
+        "workflow filename"
+      ]
+    },
+    {
+      "file": "GOODDAYGOOBUY220_FINAL/GOODBAY220_SPECIFICATION.py",
+      "score": 0,
+      "reasons": []
+    }
+  ],
+  "known_entry": "GOODDAYGOOBUY220_FINAL/KHALED27_WORKFLOW.py",
+  "known_runner": "GOODDAYGOOBUY220_FINAL/RUN_GOODDAYGOOBUY220.py",
+  "entry_import": true,
+  "runner_import": true,
+  "forensic_integrity": true,
+  "timestamp_utc": "2026-09-28T18:52:52.706400+00:00"
+}
