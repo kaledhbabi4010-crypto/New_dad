@@ -1,0 +1,390 @@
+name: GOODDAYGOODBAY220 EVIDENCE V4
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_url:
+        required: true
+        type: string
+      expected_zip:
+        required: true
+        type: string
+      expected_exe:
+        required: true
+        type: string
+
+jobs:
+
+  diagnostic:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+
+      - name: Prepare
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force RESULT | Out-Null
+          New-Item -ItemType Directory -Force WORK | Out-Null
+
+      - name: Download exact package
+        shell: powershell
+        run: |
+
+          Invoke-WebRequest `
+            "${{ inputs.package_url }}" `
+            -OutFile "WORK\package.zip"
+
+          $z = (Get-FileHash `
+            "WORK\package.zip" `
+            -Algorithm SHA256).Hash.ToLower()
+
+          if ($z -ne "${{ inputs.expected_zip }}".ToLower()) {
+            throw "ZIP_HASH_MISMATCH actual=$z"
+          }
+
+          Expand-Archive `
+            "WORK\package.zip" `
+            "WORK\PKG" `
+            -Force
+
+          $exe = Get-ChildItem `
+            "WORK\PKG" `
+            -Filter *.exe `
+            -Recurse |
+            Select-Object -First 1
+
+          $e = (Get-FileHash `
+            $exe.FullName `
+            -Algorithm SHA256).Hash.ToLower()
+
+          if ($e -ne "${{ inputs.expected_exe }}".ToLower()) {
+            throw "EXE_HASH_MISMATCH actual=$e"
+          }
+
+      - name: Deep process diagnostic
+        shell: powershell
+        run: |
+
+          $exe = Get-ChildItem `
+            "WORK\PKG" `
+            -Filter *.exe `
+            -Recurse |
+            Select-Object -First 1
+
+          $exePath = $exe.FullName
+          $exeName = $exe.Name
+          $baseName = [IO.Path]::GetFileNameWithoutExtension($exeName)
+
+          $result = [ordered]@{
+            schema = "GOODDAYGOODBAY220_EVIDENCE_V4"
+            timestamp_utc = (Get-Date).ToUniversalTime().ToString("o")
+
+            executable = [ordered]@{
+              name = $exeName
+              sha256 = (Get-FileHash $exePath -Algorithm SHA256).Hash
+              size = $exe.Length
+              path = $exePath
+            }
+
+            launch = @()
+            lifecycle = @()
+            resources = @()
+            children = @()
+            events = @()
+            final_process_state = @()
+          }
+
+          # -----------------------------------------------
+          # FUNCTION: SNAPSHOT PROCESS TREE
+          # -----------------------------------------------
+
+          function Snapshot {
+
+            $items = @()
+
+            try {
+
+              $procs = Get-CimInstance Win32_Process
+
+              foreach ($p in $procs) {
+
+                if (
+                  $p.Name -ieq $exeName -or
+                  $p.Name -ieq "$baseName.exe"
+                ) {
+
+                  $items += [ordered]@{
+                    pid = $p.ProcessId
+                    parent_pid = $p.ParentProcessId
+                    name = $p.Name
+                    command_line = $p.CommandLine
+                    executable_path = $p.ExecutablePath
+                  }
+                }
+              }
+
+            } catch {}
+
+            return $items
+          }
+
+          # -----------------------------------------------
+          # BEFORE
+          # -----------------------------------------------
+
+          $before = Snapshot
+
+          $result.final_process_state += @{
+            stage = "before"
+            processes = $before
+          }
+
+          # -----------------------------------------------
+          # LAUNCH
+          # -----------------------------------------------
+
+          $start = Get-Date
+
+          try {
+
+            $p = Start-Process `
+              -FilePath $exePath `
+              -WorkingDirectory $exe.DirectoryName `
+              -PassThru
+
+            $launch_ok = $true
+
+          } catch {
+
+            $launch_ok = $false
+
+            $result.launch += @{
+              started = $false
+              error = $_.Exception.Message
+            }
+          }
+
+          if ($launch_ok) {
+
+            $result.launch += @{
+              started = $true
+              pid = $p.Id
+              start_time = $start.ToUniversalTime().ToString("o")
+            }
+
+            # -------------------------------------------
+            # 1 SECOND
+            # -------------------------------------------
+
+            Start-Sleep -Seconds 1
+
+            $p.Refresh()
+
+            $s1 = @{
+              seconds = 1
+              has_exited = $p.HasExited
+            }
+
+            if ($p.HasExited) {
+              $s1.exit_code = $p.ExitCode
+            }
+
+            $result.lifecycle += $s1
+
+            # -------------------------------------------
+            # 3 SECOND
+            # -------------------------------------------
+
+            Start-Sleep -Seconds 2
+
+            $p.Refresh()
+
+            $s3 = @{
+              seconds = 3
+              has_exited = $p.HasExited
+            }
+
+            if ($p.HasExited) {
+              $s3.exit_code = $p.ExitCode
+            }
+
+            $result.lifecycle += $s3
+
+            # -------------------------------------------
+            # 5 SECOND
+            # -------------------------------------------
+
+            Start-Sleep -Seconds 2
+
+            $p.Refresh()
+
+            $s5 = @{
+              seconds = 5
+              has_exited = $p.HasExited
+            }
+
+            if ($p.HasExited) {
+              $s5.exit_code = $p.ExitCode
+            }
+
+            $result.lifecycle += $s5
+
+            # -------------------------------------------
+            # RESOURCE SAMPLING
+            # -------------------------------------------
+
+            for ($i = 1; $i -le 5; $i++) {
+
+              $p.Refresh()
+
+              if ($p.HasExited) {
+
+                $result.resources += @{
+                  sample = $i
+                  process_alive = $false
+                  exit_code = $p.ExitCode
+                }
+
+                break
+
+              } else {
+
+                try {
+
+                  $result.resources += @{
+                    sample = $i
+                    process_alive = $true
+                    cpu_seconds = $p.CPU
+                    working_set_bytes = $p.WorkingSet64
+                    private_memory_bytes = $p.PrivateMemorySize64
+                    handles = $p.HandleCount
+                  }
+
+                } catch {
+
+                  $result.resources += @{
+                    sample = $i
+                    process_alive = $true
+                    sampling_error = $_.Exception.Message
+                  }
+                }
+              }
+
+              Start-Sleep -Seconds 1
+            }
+
+            # -------------------------------------------
+            # PROCESS TREE
+            # -------------------------------------------
+
+            $tree = Snapshot
+
+            $result.children = $tree
+
+            # -------------------------------------------
+            # EVENT LOG CORRELATION
+            # -------------------------------------------
+
+            $end = Get-Date
+
+            try {
+
+              $ev = Get-WinEvent -FilterHashtable @{
+                LogName = "Application"
+                StartTime = $start.AddSeconds(-5)
+                EndTime = $end.AddSeconds(10)
+              } -ErrorAction SilentlyContinue
+
+              foreach ($x in $ev) {
+
+                $msg = $x.Message
+
+                if (
+                  $msg -match [regex]::Escape($exeName) -or
+                  $msg -match [regex]::Escape($baseName)
+                ) {
+
+                  $result.events += @{
+                    time = $x.TimeCreated
+                    id = $x.Id
+                    provider = $x.ProviderName
+                    level = $x.LevelDisplayName
+                    message = $msg
+                  }
+                }
+              }
+
+            } catch {}
+
+            # -------------------------------------------
+            # TERMINATION
+            # -------------------------------------------
+
+            $preTerminate = Snapshot
+
+            $result.final_process_state += @{
+              stage = "before_termination"
+              processes = $preTerminate
+            }
+
+            if (-not $p.HasExited) {
+
+              try {
+                Stop-Process `
+                  -Id $p.Id `
+                  -Force `
+                  -ErrorAction SilentlyContinue
+              } catch {}
+            }
+
+            Start-Sleep -Seconds 3
+
+            $afterTerminate = Snapshot
+
+            $result.final_process_state += @{
+              stage = "after_termination"
+              processes = $afterTerminate
+            }
+          }
+
+          # -----------------------------------------------
+          # MACHINE PROCESS INVENTORY
+          # -----------------------------------------------
+
+          try {
+
+            $all = Get-CimInstance Win32_Process |
+              Where-Object {
+                $_.Name -ieq $exeName -or
+                $_.Name -ieq "$baseName.exe"
+              }
+
+            $result.final_inventory = @(
+              $all | ForEach-Object {
+                @{
+                  pid = $_.ProcessId
+                  parent_pid = $_.ParentProcessId
+                  name = $_.Name
+                  executable_path = $_.ExecutablePath
+                  command_line = $_.CommandLine
+                }
+              }
+            )
+
+          } catch {}
+
+          $result | ConvertTo-Json -Depth 20 |
+            Set-Content `
+              "RESULT\DEEP_DIAGNOSTIC.json" `
+              -Encoding UTF8
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GOODDAYGOODBAY220-DEEP-DIAGNOSTIC
+          path: |
+            RESULT/**
+            WORK/**
+          if-no-files-found: warn
