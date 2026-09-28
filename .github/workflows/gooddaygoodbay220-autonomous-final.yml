@@ -5,94 +5,61 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
 
-  windows-final:
+  production-windows:
 
     runs-on: windows-latest
 
-    steps:
+    timeout-minutes: 90
 
-      # ================================================================
-      # CHECKOUT
-      # ================================================================
+    steps:
 
       - name: Checkout exact source
         uses: actions/checkout@v4
 
-      - name: Print exact commit
+      - name: Source identity
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
           Write-Host "GITHUB_SHA=$env:GITHUB_SHA"
           git rev-parse HEAD
 
-      # ================================================================
-      # PYTHON
-      # ================================================================
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      # ================================================================
-      # SYSTEM INVENTORY
-      # ================================================================
-
-      - name: Windows and Python inventory
+      - name: Windows inventory
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-
-          Write-Host "Windows:"
           Get-CimInstance Win32_OperatingSystem |
             Select-Object Caption,Version,OSArchitecture
-
-          Write-Host ""
-          Write-Host "Python:"
           python --version
-
-          Write-Host ""
-          Write-Host "Architecture:"
           python -c "import platform; print(platform.platform()); print(platform.machine())"
 
-      # ================================================================
-      # PRODUCTION COMPILE
-      # ================================================================
-
-      - name: Compile production source
+      - name: Production syntax
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
 
-          $files = Get-ChildItem `
-            GOODDAYGOOBUY220_FINAL `
-            -Recurse `
-            -Filter *.py
+          Get-ChildItem GOODDAYGOOBUY220_FINAL -Recurse -Filter *.py |
+            ForEach-Object {
 
-          foreach ($file in $files) {
+              if ($_.Name -eq "WINDOWS_AUTONOMOUS_FINAL_BUILDER.py") {
+                return
+              }
 
-            if ($file.Name -eq "WINDOWS_AUTONOMOUS_FINAL_BUILDER.py") {
-              continue
+              python -m py_compile "$($_.FullName)"
+
+              if ($LASTEXITCODE -ne 0) {
+                throw "Compile failed: $($_.FullName)"
+              }
             }
 
-            Write-Host "COMPILE:" $file.FullName
-
-            python -m py_compile "$($file.FullName)"
-
-            if ($LASTEXITCODE -ne 0) {
-              throw "Compile failure: $($file.FullName)"
-            }
-          }
-
-      # ================================================================
-      # REAL IMPORTS
-      # ================================================================
-
-      - name: Real application import test
+      - name: Real imports
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -111,11 +78,7 @@ jobs:
             throw "RUN_GOODDAYGOOBUY220 import failed"
           }
 
-      # ================================================================
-      # BUILD
-      # ================================================================
-
-      - name: Autonomous Windows production build
+      - name: Autonomous native Windows build
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -123,14 +86,10 @@ jobs:
           python GOODDAYGOOBUY220_FINAL\WINDOWS_AUTONOMOUS_FINAL_BUILDER.py
 
           if ($LASTEXITCODE -ne 0) {
-            throw "Autonomous Windows production builder failed."
+            throw "Windows builder failed"
           }
 
-      # ================================================================
-      # VERIFY EXE
-      # ================================================================
-
-      - name: Verify PE executable
+      - name: Verify final EXE
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -138,7 +97,7 @@ jobs:
           $exe = "WINDOWS_RELEASE\package\GooddayGoodbay220\GooddayGoodbay220.exe"
 
           if (!(Test-Path $exe)) {
-            throw "Final EXE not found."
+            throw "EXE missing"
           }
 
           $bytes = [System.IO.File]::ReadAllBytes(
@@ -146,24 +105,16 @@ jobs:
           )
 
           if ($bytes.Length -lt 2) {
-            throw "EXE is empty."
+            throw "EXE empty"
           }
 
           if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
-            throw "EXE is not a valid PE MZ executable."
+            throw "Not a Windows PE executable"
           }
 
-          $hash = Get-FileHash `
-            $exe `
-            -Algorithm SHA256
+          Write-Host "EXE_SHA256=$((Get-FileHash $exe -Algorithm SHA256).Hash)"
 
-          Write-Host "FINAL_EXE_SHA256=$($hash.Hash)"
-
-      # ================================================================
-      # VERIFY ZIP
-      # ================================================================
-
-      - name: Verify ZIP
+      - name: Verify final ZIP
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -171,14 +122,10 @@ jobs:
           $zip = "WINDOWS_RELEASE\GooddayGoodbay220.zip"
 
           if (!(Test-Path $zip)) {
-            throw "Final ZIP not found."
+            throw "ZIP missing"
           }
 
-          $hash = Get-FileHash `
-            $zip `
-            -Algorithm SHA256
-
-          Write-Host "FINAL_ZIP_SHA256=$($hash.Hash)"
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
 
           $archive = [System.IO.Compression.ZipFile]::OpenRead(
             (Resolve-Path $zip)
@@ -188,74 +135,36 @@ jobs:
 
             $expected = "GooddayGoodbay220/GooddayGoodbay220.exe"
 
-            $found = $false
-
-            foreach ($entry in $archive.Entries) {
-
-              Write-Host $entry.FullName
-
-              if ($entry.FullName -eq $expected) {
-                $found = $true
-              }
-            }
-
-            if (!$found) {
-              throw "EXE missing from final ZIP."
+            if (
+              -not (
+                $archive.Entries.FullName -contains $expected
+              )
+            ) {
+              throw "EXE missing from ZIP"
             }
 
           }
           finally {
-
             $archive.Dispose()
-
           }
 
-      # ================================================================
-      # FINAL EVIDENCE
-      # ================================================================
+          Write-Host "ZIP_SHA256=$((Get-FileHash $zip -Algorithm SHA256).Hash)"
 
       - name: Final evidence
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
 
-          $exe = "WINDOWS_RELEASE\package\GooddayGoodbay220\GooddayGoodbay220.exe"
-          $zip = "WINDOWS_RELEASE\GooddayGoodbay220.zip"
-
-          $exeHash = (
-            Get-FileHash `
-              $exe `
-              -Algorithm SHA256
-          ).Hash
-
-          $zipHash = (
-            Get-FileHash `
-              $zip `
-              -Algorithm SHA256
-          ).Hash
-
           @"
           GOODDAYGOODBAY220 FINAL WINDOWS EVIDENCE
-
           PRODUCT=GooddayGoodbay220
           SOURCE_COMMIT=$env:GITHUB_SHA
-          RUNNER_OS=$env:RUNNER_OS
-          RUNNER_ARCH=$env:RUNNER_ARCH
-
-          EXE_SHA256=$exeHash
-          ZIP_SHA256=$zipHash
-
+          EXE_SHA256=$((Get-FileHash WINDOWS_RELEASE\package\GooddayGoodbay220\GooddayGoodbay220.exe -Algorithm SHA256).Hash)
+          ZIP_SHA256=$((Get-FileHash WINDOWS_RELEASE\GooddayGoodbay220.zip -Algorithm SHA256).Hash)
           STATUS=WINDOWS_PACKAGE_BUILT_AND_VERIFIED
-          "@ |
-          Out-File `
-            WINDOWS_RELEASE\GITHUB_FINAL_EVIDENCE.txt `
-            -Encoding utf8
+          "@ | Out-File WINDOWS_RELEASE\GITHUB_FINAL_EVIDENCE.txt -Encoding utf8
 
-      # ================================================================
-      # ARTIFACT
-      # ================================================================
-
-      - name: Upload final package
+      - name: Upload final artifact
         uses: actions/upload-artifact@v4
         with:
           name: GooddayGoodbay220-AUTONOMOUS-FINAL
