@@ -1,0 +1,97 @@
+name: GOODDAYGOODBAY220 FINAL WINDOWS FACTORY
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+
+  final-windows-build:
+
+    runs-on: windows-latest
+
+    timeout-minutes: 45
+
+    steps:
+
+      - name: Checkout exact source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Python diagnostics
+        shell: pwsh
+        run: |
+          python --version
+          python -c "import sys; print(sys.executable)"
+          git rev-parse HEAD
+
+      - name: Production syntax
+        shell: pwsh
+        run: |
+          python -m compileall -q GOODDAYGOODBAY220_FINAL
+
+      - name: Run real Windows builder
+        shell: pwsh
+        run: |
+          python GOODDAYGOODBAY220_FINAL/WINDOWS_FINAL_REAL_BUILDER.py
+
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          if (!(Test-Path "RELEASE/GooddayGoodbay220.exe")) {
+            throw "EXE NOT FOUND"
+          }
+
+          $size = (Get-Item "RELEASE/GooddayGoodbay220.exe").Length
+
+          if ($size -lt 100000) {
+            throw "EXE TOO SMALL"
+          }
+
+          $bytes = [System.IO.File]::ReadAllBytes(
+            "RELEASE/GooddayGoodbay220.exe"
+          )
+
+          if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) {
+            throw "INVALID PE HEADER"
+          }
+
+          Write-Host "EXE SIZE = $size"
+
+      - name: Verify ZIP
+        shell: pwsh
+        run: |
+          if (!(Test-Path "RELEASE/GooddayGoodbay220.zip")) {
+            throw "ZIP NOT FOUND"
+          }
+
+          Expand-Archive `
+            -Path "RELEASE/GooddayGoodbay220.zip" `
+            -DestinationPath "RELEASE/ZIP_TEST" `
+            -Force
+
+          if (!(Test-Path "RELEASE/ZIP_TEST/GooddayGoodbay220.exe")) {
+            throw "EXE MISSING FROM ZIP"
+          }
+
+      - name: Upload final artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GooddayGoodbay220-FINAL
+          path: |
+            RELEASE/GooddayGoodbay220.exe
+            RELEASE/GooddayGoodbay220.zip
+            RELEASE/BUILD_EVIDENCE.json
+            RELEASE/ENTRYPOINTS_WINDOWS.json
+            RELEASE/runtime.log
+            RELEASE/BUILD_OUTPUT.txt
+          if-no-files-found: error
