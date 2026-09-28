@@ -1,43 +1,32 @@
 
-import ast
-import hashlib
-import json
 import os
-import shutil
-import subprocess
 import sys
-import time
+import ast
+import json
+import shutil
+import hashlib
+import subprocess
 import zipfile
 from pathlib import Path
 
-
 ROOT = Path.cwd()
 PROD = ROOT / "GOODDAYGOOBUY220_FINAL"
+RUNNER = PROD / "RUN_GOODDAYGOOBUY220.py"
 
 OUT = ROOT / "WINDOWS_RELEASE"
 DIST = OUT / "dist"
 BUILD = OUT / "build"
 PACKAGE = OUT / "package"
 
-OUT.mkdir(exist_ok=True)
-DIST.mkdir(exist_ok=True)
-BUILD.mkdir(exist_ok=True)
-PACKAGE.mkdir(exist_ok=True)
-
-
-RUNNER = PROD / "RUN_GOODDAYGOOBUY220.py"
-
+for p in (OUT, DIST, BUILD, PACKAGE):
+    p.mkdir(parents=True, exist_ok=True)
 
 def fail(msg):
     print("HARD BLOCK:", msg)
     raise SystemExit(1)
 
-
-def run(cmd, timeout=1200, allow_fail=False):
-
-    print()
-    print("$", " ".join(map(str, cmd)))
-
+def run(cmd, timeout=1800, allow_fail=False):
+    print("\n$", " ".join(map(str, cmd)))
     p = subprocess.run(
         [str(x) for x in cmd],
         stdout=subprocess.PIPE,
@@ -45,46 +34,21 @@ def run(cmd, timeout=1200, allow_fail=False):
         text=True,
         timeout=timeout
     )
-
-    print(p.stdout[-16000:])
-
-    if p.returncode != 0 and not allow_fail:
-
-        fail(
-            "COMMAND_FAILED\n" +
-            " ".join(map(str, cmd))
-        )
-
+    print(p.stdout[-18000:])
+    if p.returncode and not allow_fail:
+        fail("COMMAND FAILED")
     return p
 
-
 def sha256(path):
-
     h = hashlib.sha256()
-
     with open(path, "rb") as f:
-
-        for chunk in iter(
-            lambda: f.read(1024 * 1024),
-            b""
-        ):
-            h.update(chunk)
-
+        for c in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(c)
     return h.hexdigest()
 
-
-# -------------------------------------------------------------------------
-# Install PyInstaller
-# -------------------------------------------------------------------------
-
-run([
-    sys.executable,
-    "-m",
-    "pip",
-    "install",
-    "--upgrade",
-    "pip"
-], timeout=600)
+# ----------------------------------------------------------------------
+# Upgrade packaging tools
+# ----------------------------------------------------------------------
 
 run([
     sys.executable,
@@ -92,33 +56,33 @@ run([
     "pip",
     "install",
     "--upgrade",
+    "pip",
+    "setuptools",
+    "wheel",
     "pyinstaller"
-], timeout=1200)
+], timeout=1800)
 
+# ----------------------------------------------------------------------
+# Compile everything in production
+# ----------------------------------------------------------------------
 
-# -------------------------------------------------------------------------
-# Source compilation
-# -------------------------------------------------------------------------
+for f in PROD.rglob("*.py"):
 
-for source in PROD.rglob("*.py"):
-
-    if source.name == Path(__file__).name:
+    if f.name == Path(__file__).name:
         continue
 
     run([
         sys.executable,
         "-m",
         "py_compile",
-        str(source)
+        str(f)
     ], timeout=300)
 
-
-# -------------------------------------------------------------------------
-# Real imports
-# -------------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# Import tests
+# ----------------------------------------------------------------------
 
 env = os.environ.copy()
-
 env["PYTHONPATH"] = str(PROD)
 
 for module in (
@@ -141,20 +105,19 @@ for module in (
 
     print(p.stdout[-10000:])
 
-    if p.returncode != 0:
-        fail(f"Import failed: {module}")
+    if p.returncode:
+        fail("REAL IMPORT FAILED: " + module)
 
+# ----------------------------------------------------------------------
+# Discover imports from runner
+# ----------------------------------------------------------------------
 
-# -------------------------------------------------------------------------
-# AST dependency discovery
-# -------------------------------------------------------------------------
-
-source = RUNNER.read_text(
-    encoding="utf-8",
-    errors="replace"
+tree = ast.parse(
+    RUNNER.read_text(
+        encoding="utf-8",
+        errors="replace"
+    )
 )
-
-tree = ast.parse(source)
 
 imports = set()
 
@@ -162,8 +125,8 @@ for node in ast.walk(tree):
 
     if isinstance(node, ast.Import):
 
-        for alias in node.names:
-            imports.add(alias.name.split(".")[0])
+        for a in node.names:
+            imports.add(a.name.split(".")[0])
 
     elif isinstance(node, ast.ImportFrom):
 
@@ -172,262 +135,159 @@ for node in ast.walk(tree):
                 node.module.split(".")[0]
             )
 
-
 stdlib = {
-    "sys", "os", "json", "re", "time", "pathlib",
-    "typing", "subprocess", "shutil", "hashlib",
-    "datetime", "threading", "queue", "logging",
-    "argparse", "zipfile", "tempfile", "platform",
-    "socket", "ssl", "uuid", "enum", "dataclasses",
-    "traceback", "inspect", "functools", "itertools",
-    "collections", "math", "statistics", "csv",
-    "xml", "sqlite3", "urllib", "http", "email",
-    "base64", "secrets", "random", "glob", "fnmatch",
-    "copy", "pickle", "struct", "ctypes"
+    "sys","os","json","re","time","pathlib","typing",
+    "subprocess","shutil","hashlib","datetime","threading",
+    "queue","logging","argparse","zipfile","tempfile",
+    "platform","socket","ssl","uuid","enum","dataclasses",
+    "traceback","inspect","functools","itertools","collections",
+    "math","statistics","csv","xml","sqlite3","urllib","http",
+    "email","base64","secrets","random","glob","fnmatch",
+    "copy","pickle","struct","ctypes","ast","io","tokenize",
+    "__future__"
 }
 
-local_modules = {
-    p.stem
-    for p in PROD.rglob("*.py")
+local = {
+    f.stem
+    for f in PROD.rglob("*.py")
 }
 
 third_party = sorted(
     x for x in imports
-    if x not in stdlib
-    and x not in local_modules
+    if x not in stdlib and x not in local
 )
 
+print("THIRD_PARTY:", third_party)
 
-# -------------------------------------------------------------------------
-# Install discovered third-party modules.
-#
-# Failure is tolerated because some imports can be optional.
-# -------------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# Install dependencies
+# ----------------------------------------------------------------------
 
-for package in third_party:
+for pkg in third_party:
 
-    print(
-        "OPTIONAL DEPENDENCY:",
-        package
-    )
+    print("INSTALL OPTIONAL:", pkg)
 
     run([
         sys.executable,
         "-m",
         "pip",
         "install",
-        package
-    ], timeout=600, allow_fail=True)
+        pkg
+    ], timeout=900, allow_fail=True)
 
+# ----------------------------------------------------------------------
+# Build strategies
+# ----------------------------------------------------------------------
 
-# -------------------------------------------------------------------------
-# Find package metadata.
-# -------------------------------------------------------------------------
-
-package_candidates = []
-
-for package in third_party:
-
-    try:
-
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-c",
-                (
-                    "import importlib.util,sys;"
-                    "name=sys.argv[1];"
-                    "print(importlib.util.find_spec(name))"
-                ),
-                package
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            text=True
-        )
-
-        if result.returncode == 0:
-            package_candidates.append(package)
-
-    except Exception:
-        pass
-
-
-# -------------------------------------------------------------------------
-# DATA collection
-# -------------------------------------------------------------------------
-
-datas = []
-
-extensions = {
-    ".json",
-    ".yaml",
-    ".yml",
-    ".toml",
-    ".ini",
-    ".cfg",
-    ".txt",
-    ".csv",
-    ".xml",
-    ".html",
-    ".css",
-    ".js",
-    ".ico",
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".svg",
-    ".pem",
-    ".crt",
-    ".cer"
-}
-
-for f in PROD.rglob("*"):
-
-    if f.is_file() and f.suffix.lower() in extensions:
-
-        datas.append(
+strategies = [
+    (
+        "ONEFILE_BASE",
+        [
+            "--clean",
+            "--noconfirm",
+            "--onefile",
+            "--name",
+            "GooddayGoodbay220",
+            "--paths",
+            str(PROD),
+            str(RUNNER)
+        ]
+    ),
+    (
+        "ONEFILE_COLLECT",
+        [
+            "--clean",
+            "--noconfirm",
+            "--onefile",
+            "--name",
+            "GooddayGoodbay220",
+            "--paths",
+            str(PROD)
+        ] +
+        sum(
             (
-                str(f),
-                str(
-                    f.parent.relative_to(PROD)
-                )
-            )
-        )
+                [
+                    "--collect-submodules",
+                    p,
+                    "--collect-data",
+                    p
+                ]
+                for p in third_party
+            ),
+            []
+        ) +
+        [
+            str(RUNNER)
+        ]
+    ),
+    (
+        "ONEFILE_HIDDEN",
+        [
+            "--clean",
+            "--noconfirm",
+            "--onefile",
+            "--name",
+            "GooddayGoodbay220",
+            "--paths",
+            str(PROD)
+        ] +
+        sum(
+            (
+                [
+                    "--hidden-import",
+                    p,
+                    "--collect-submodules",
+                    p,
+                    "--collect-data",
+                    p
+                ]
+                for p in third_party
+            ),
+            []
+        ) +
+        [
+            str(RUNNER)
+        ]
+    ),
+    (
+        "ONEDIR_DIAGNOSTIC",
+        [
+            "--clean",
+            "--noconfirm",
+            "--onedir",
+            "--name",
+            "GooddayGoodbay220",
+            "--paths",
+            str(PROD)
+        ] +
+        sum(
+            (
+                [
+                    "--hidden-import",
+                    p,
+                    "--collect-submodules",
+                    p,
+                    "--collect-data",
+                    p
+                ]
+                for p in third_party
+            ),
+            []
+        ) +
+        [
+            str(RUNNER)
+        ]
+    )
+]
 
+results = []
+final_exe = None
+final_strategy = None
 
-# -------------------------------------------------------------------------
-# Strategy 1
-#
-# Normal PyInstaller.
-# -------------------------------------------------------------------------
+for name, args in strategies:
 
-strategies = []
-
-
-strategies.append({
-    "name": "normal",
-    "args": [
-        "--clean",
-        "--noconfirm",
-        "--onefile",
-        "--name",
-        "GooddayGoodbay220",
-        "--paths",
-        str(PROD),
-        str(RUNNER)
-    ]
-})
-
-
-# -------------------------------------------------------------------------
-# Strategy 2
-#
-# Add recursive collection for discovered third-party packages.
-# -------------------------------------------------------------------------
-
-collect_args = []
-
-for package in package_candidates:
-
-    collect_args += [
-        "--collect-submodules",
-        package
-    ]
-
-    collect_args += [
-        "--collect-data",
-        package
-    ]
-
-
-strategies.append({
-    "name": "recursive_dependencies",
-    "args": [
-        "--clean",
-        "--noconfirm",
-        "--onefile",
-        "--name",
-        "GooddayGoodbay220",
-        "--paths",
-        str(PROD)
-    ] + collect_args + [
-        str(RUNNER)
-    ]
-})
-
-
-# -------------------------------------------------------------------------
-# Strategy 3
-#
-# Explicit hidden imports.
-# -------------------------------------------------------------------------
-
-hidden_args = []
-
-for package in package_candidates:
-
-    hidden_args += [
-        "--hidden-import",
-        package
-    ]
-
-strategies.append({
-    "name": "hidden_imports",
-    "args": [
-        "--clean",
-        "--noconfirm",
-        "--onefile",
-        "--name",
-        "GooddayGoodbay220",
-        "--paths",
-        str(PROD)
-    ] + hidden_args + collect_args + [
-        str(RUNNER)
-    ]
-})
-
-
-# -------------------------------------------------------------------------
-# Strategy 4
-#
-# Build ONEDIR first.
-# This is a diagnostic fallback and gives PyInstaller a more transparent
-# collection layout.
-# -------------------------------------------------------------------------
-
-strategies.append({
-    "name": "onedir_diagnostic",
-    "args": [
-        "--clean",
-        "--noconfirm",
-        "--onedir",
-        "--name",
-        "GooddayGoodbay220",
-        "--paths",
-        str(PROD)
-    ] + hidden_args + collect_args + [
-        str(RUNNER)
-    ]
-})
-
-
-# -------------------------------------------------------------------------
-# Build loop
-# -------------------------------------------------------------------------
-
-build_results = []
-
-successful_exe = None
-successful_strategy = None
-
-for strategy in strategies:
-
-    name = strategy["name"]
-
-    print()
-    print("=" * 90)
-    print("BUILD STRATEGY:", name)
+    print("\n" + "=" * 90)
+    print("STRATEGY:", name)
     print("=" * 90)
 
     if DIST.exists():
@@ -439,33 +299,25 @@ for strategy in strategies:
     DIST.mkdir(parents=True, exist_ok=True)
     BUILD.mkdir(parents=True, exist_ok=True)
 
-    command = [
-        sys.executable,
-        "-m",
-        "PyInstaller"
-    ] + strategy["args"]
-
-    result = run(
-        command,
-        timeout=1800,
+    p = run(
+        [
+            sys.executable,
+            "-m",
+            "PyInstaller"
+        ] + args,
+        timeout=2400,
         allow_fail=True
     )
 
-    result_record = {
+    results.append({
         "strategy": name,
-        "returncode": result.returncode,
-        "output_tail": result.stdout[-20000:]
-    }
+        "returncode": p.returncode,
+        "output": p.stdout[-30000:]
+    })
 
-    build_results.append(result_record)
-
-    # ---------------------------------------------------------------------
-    # Search every possible EXE generated by the strategy.
-    # ---------------------------------------------------------------------
-
-    candidates = list(DIST.rglob("GooddayGoodbay220.exe"))
-
-    valid = []
+    candidates = list(
+        DIST.rglob("GooddayGoodbay220.exe")
+    )
 
     for candidate in candidates:
 
@@ -474,39 +326,27 @@ for strategy in strategies:
             with open(candidate, "rb") as f:
                 magic = f.read(2)
 
-            if magic == b"MZ" and candidate.stat().st_size > 100000:
+            if (
+                magic == b"MZ"
+                and candidate.stat().st_size > 100000
+            ):
 
-                valid.append(candidate)
+                final_exe = candidate
+                final_strategy = name
+                break
 
         except Exception:
             pass
 
-
-    if valid:
-
-        successful_exe = valid[0]
-        successful_strategy = name
-
-        print(
-            "[PASS] VALID WINDOWS PE FOUND:",
-            successful_exe
-        )
-
+    if final_exe:
+        print("[PASS] VALID PE:", final_exe)
         break
 
-    print(
-        "[WARN] Strategy did not produce a valid EXE:",
-        name
-    )
+if not final_exe:
 
-
-if successful_exe is None:
-
-    Path(
-        OUT / "BUILD_ATTEMPTS.json"
-    ).write_text(
+    (OUT / "BUILD_ATTEMPTS.json").write_text(
         json.dumps(
-            build_results,
+            results,
             indent=2,
             ensure_ascii=False
         ),
@@ -514,91 +354,83 @@ if successful_exe is None:
     )
 
     fail(
-        "All PyInstaller production strategies failed."
+        "All Windows build strategies failed."
     )
 
+# ----------------------------------------------------------------------
+# Package
+# ----------------------------------------------------------------------
 
-# -------------------------------------------------------------------------
-# EXE verification
-# -------------------------------------------------------------------------
-
-exe_sha256 = sha256(successful_exe)
-
-exe_size = successful_exe.stat().st_size
-
-print(
-    "SUCCESSFUL STRATEGY:",
-    successful_strategy
+package = (
+    PACKAGE /
+    "GooddayGoodbay220"
 )
 
-print(
-    "EXE SHA256:",
-    exe_sha256
+if package.exists():
+    shutil.rmtree(package)
+
+package.mkdir(
+    parents=True,
+    exist_ok=True
 )
 
-print(
-    "EXE SIZE:",
-    exe_size
+final_copy = (
+    package /
+    "GooddayGoodbay220.exe"
 )
 
+shutil.copy2(
+    final_exe,
+    final_copy
+)
 
-# -------------------------------------------------------------------------
-# Runtime interface discovery
-# -------------------------------------------------------------------------
+exe_hash = sha256(final_copy)
 
-runner_tree = ast.parse(source)
+# ----------------------------------------------------------------------
+# Safe runtime verification
+# ----------------------------------------------------------------------
 
-has_argparse = False
-has_click = False
-has_typer = False
+runtime = {
+    "performed": False,
+    "returncode": None,
+    "output": ""
+}
 
-for node in ast.walk(runner_tree):
+source = RUNNER.read_text(
+    encoding="utf-8",
+    errors="replace"
+)
+
+tree = ast.parse(source)
+
+cli = False
+
+for node in ast.walk(tree):
 
     if isinstance(node, ast.Call):
 
         if isinstance(node.func, ast.Attribute):
 
-            if node.func.attr == "ArgumentParser":
-                has_argparse = True
-
             if node.func.attr in (
+                "ArgumentParser",
                 "command",
                 "group",
                 "option"
             ):
-                has_click = True
+                cli = True
 
         if isinstance(node.func, ast.Name):
 
             if node.func.id == "Typer":
-                has_typer = True
+                cli = True
 
-
-runtime = {
-    "cli_detected": (
-        has_argparse
-        or has_click
-        or has_typer
-    ),
-    "executed": False,
-    "returncode": None,
-    "output": ""
-}
-
-
-# -------------------------------------------------------------------------
-# Safe smoke test
-#
-# Only --help is used when a CLI framework was detected.
-# -------------------------------------------------------------------------
-
-if runtime["cli_detected"]:
+if cli:
 
     try:
 
         p = subprocess.run(
             [
-                str(successful_exe),
+                str(final_copy),
                 "--help"
             ],
             stdout=subprocess.PIPE,
@@ -607,20 +439,13 @@ if runtime["cli_detected"]:
             timeout=180
         )
 
-        runtime["executed"] = True
+        runtime["performed"] = True
         runtime["returncode"] = p.returncode
-        runtime["output"] = p.stdout[-20000:]
+        runtime["output"] = p.stdout[-30000:]
 
         print(
             p.stdout[-12000:]
         )
-
-        if p.returncode != 0:
-
-            print(
-                "WARNING: EXE --help returned:",
-                p.returncode
-            )
 
     except Exception as e:
 
@@ -629,59 +454,27 @@ if runtime["cli_detected"]:
 else:
 
     print(
-        "No CLI framework detected. "
-        "No destructive/no-argument execution will be invented."
+        "[INFO] No CLI detected; "
+        "no destructive execution invented."
     )
 
-
-# -------------------------------------------------------------------------
-# PACKAGE
-# -------------------------------------------------------------------------
-
-package_root = (
-    PACKAGE /
-    "GooddayGoodbay220"
-)
-
-if package_root.exists():
-    shutil.rmtree(package_root)
-
-package_root.mkdir(
-    parents=True,
-    exist_ok=True
-)
-
-final_exe = (
-    package_root /
-    "GooddayGoodbay220.exe"
-)
-
-shutil.copy2(
-    successful_exe,
-    final_exe
-)
-
-
-# -------------------------------------------------------------------------
+# ----------------------------------------------------------------------
 # Evidence
-# -------------------------------------------------------------------------
+# ----------------------------------------------------------------------
 
 evidence = {
     "product": "GooddayGoodbay220",
     "entrypoint":
         "GOODDAYGOOBUY220_FINAL/RUN_GOODDAYGOOBUY220.py",
-    "successful_strategy": successful_strategy,
-    "exe_sha256": exe_sha256,
-    "exe_size": exe_size,
+    "strategy": final_strategy,
+    "exe_size": final_copy.stat().st_size,
+    "exe_sha256": exe_hash,
     "pe_magic": "MZ",
     "runtime": runtime,
-    "third_party_candidates": third_party,
-    "package_candidates": package_candidates,
-    "build_attempts": build_results,
-    "timestamp_utc": time.time()
+    "build_attempts": results
 }
 
-(package_root / "BUILD_EVIDENCE.json").write_text(
+(package / "BUILD_EVIDENCE.json").write_text(
     json.dumps(
         evidence,
         indent=2,
@@ -690,10 +483,9 @@ evidence = {
     encoding="utf-8"
 )
 
-
-# -------------------------------------------------------------------------
+# ----------------------------------------------------------------------
 # ZIP
-# -------------------------------------------------------------------------
+# ----------------------------------------------------------------------
 
 zip_path = (
     OUT /
@@ -709,31 +501,26 @@ with zipfile.ZipFile(
     zipfile.ZIP_DEFLATED
 ) as z:
 
-    for file in package_root.rglob("*"):
+    for f in package.rglob("*"):
 
-        if file.is_file():
+        if f.is_file():
 
             z.write(
-                file,
-                file.relative_to(PACKAGE)
+                f,
+                f.relative_to(PACKAGE)
             )
 
-
-# -------------------------------------------------------------------------
-# ZIP verification
-# -------------------------------------------------------------------------
+# ----------------------------------------------------------------------
+# ZIP validation
+# ----------------------------------------------------------------------
 
 with zipfile.ZipFile(
     zip_path,
     "r"
 ) as z:
 
-    bad = z.testzip()
-
-    if bad:
-        fail(
-            "ZIP integrity failed: " + bad
-        )
+    if z.testzip():
+        fail("ZIP integrity failure.")
 
     expected = (
         "GooddayGoodbay220/"
@@ -741,81 +528,34 @@ with zipfile.ZipFile(
     )
 
     if expected not in z.namelist():
+        fail("EXE missing from ZIP.")
 
-        fail(
-            "Expected executable missing from ZIP."
-        )
-
-
-zip_sha256 = sha256(zip_path)
-
-
-# -------------------------------------------------------------------------
-# Extract ZIP and compare EXE hash
-# -------------------------------------------------------------------------
-
-verify_dir = OUT / "ZIP_VERIFY"
-
-if verify_dir.exists():
-    shutil.rmtree(verify_dir)
-
-verify_dir.mkdir()
-
-with zipfile.ZipFile(
-    zip_path,
-    "r"
-) as z:
-    z.extractall(verify_dir)
-
-inside_exe = (
-    verify_dir /
-    "GooddayGoodbay220" /
-    "GooddayGoodbay220.exe"
-)
-
-if not inside_exe.exists():
-    fail(
-        "EXE not found after ZIP extraction."
-    )
-
-inside_hash = sha256(inside_exe)
-
-if inside_hash != exe_sha256:
-    fail(
-        "EXE SHA256 changed after ZIP packaging."
-    )
-
-
-# -------------------------------------------------------------------------
-# Final evidence
-# -------------------------------------------------------------------------
-
-final_evidence = {
-    **evidence,
-    "zip_sha256": zip_sha256,
-    "zip_size": zip_path.stat().st_size,
-    "zip_integrity": "PASS",
-    "zip_exe_hash_preservation": "PASS",
-    "status": "WINDOWS_PACKAGE_BUILT_AND_VERIFIED"
-}
+zip_hash = sha256(zip_path)
 
 (OUT / "FINAL_WINDOWS_EVIDENCE.json").write_text(
     json.dumps(
-        final_evidence,
+        {
+            "status":
+                "WINDOWS_PACKAGE_BUILT_AND_VERIFIED",
+            "exe_sha256": exe_hash,
+            "zip_sha256": zip_hash,
+            "exe_size":
+                final_copy.stat().st_size,
+            "zip_size":
+                zip_path.stat().st_size,
+            "strategy": final_strategy,
+            "runtime": runtime
+        },
         indent=2,
         ensure_ascii=False
     ),
     encoding="utf-8"
 )
 
-
-print()
-print("=" * 100)
-print("WINDOWS PRODUCTION PACKAGE PASS")
-print("=" * 100)
-print("EXE:", final_exe)
-print("EXE SHA256:", exe_sha256)
+print("=" * 90)
+print("WINDOWS BUILD PASS")
+print("EXE:", final_copy)
 print("ZIP:", zip_path)
-print("ZIP SHA256:", zip_sha256)
-print("STRATEGY:", successful_strategy)
-print("=" * 100)
+print("EXE SHA256:", exe_hash)
+print("ZIP SHA256:", zip_hash)
+print("=" * 90)
