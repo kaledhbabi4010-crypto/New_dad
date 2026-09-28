@@ -1,0 +1,212 @@
+name: GOODDAYGOODBAY220-INSTALL-ONLY-20260928_205115
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install-test:
+    runs-on: windows-latest
+    timeout-minutes: 10
+
+    steps:
+
+      - name: Download exact EXE
+        shell: python
+        env:
+          URL: "https://raw.githubusercontent.com/kaledhbabi4010-crypto/New_dad/main/GOODDAYGOODBAY220_FINAL/RELEASE/GooddayGoodbay220.exe"
+        run: |
+          import os
+          import urllib.request
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_INSTALL_TEST")
+          root.mkdir(parents=True, exist_ok=True)
+
+          exe = root / "GooddayGoodbay220.exe"
+
+          req = urllib.request.Request(
+              os.environ["URL"],
+              headers={"User-Agent": "GooddayGoodbay220-install-test"}
+          )
+
+          with urllib.request.urlopen(req, timeout=120) as r:
+              exe.write_bytes(r.read())
+
+          print("EXE:", exe)
+          print("SIZE:", exe.stat().st_size)
+
+      - name: Snapshot BEFORE
+        shell: python
+        run: |
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_INSTALL_TEST")
+
+          def run(cmd):
+              try:
+                  p = subprocess.run(
+                      cmd,
+                      capture_output=True,
+                      text=True,
+                      errors="replace",
+                      timeout=30
+                  )
+                  return {
+                      "return_code": p.returncode,
+                      "stdout": p.stdout,
+                      "stderr": p.stderr
+                  }
+              except Exception as e:
+                  return {"error": repr(e)}
+
+          before = {
+              "program_files": run([
+                  "cmd", "/c", "dir",
+                  r"C:\Program Files"
+              ]),
+              "program_files_x86": run([
+                  "cmd", "/c", "dir",
+                  r"C:\Program Files (x86)"
+              ]),
+              "start_menu": run([
+                  "cmd", "/c", "dir",
+                  r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
+              ]),
+              "uninstall_registry": run([
+                  "reg", "query",
+                  r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                  "/s"
+              ])
+          }
+
+          (root / "before.json").write_text(
+              json.dumps(before, indent=2),
+              encoding="utf-8"
+          )
+
+          print("BEFORE SNAPSHOT COMPLETE")
+
+      - name: Detect installer type
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_INSTALL_TEST")
+          exe = root / "GooddayGoodbay220.exe"
+
+          result = {
+              "exe_exists": exe.exists(),
+              "installer_switch_executed": False,
+              "reason": (
+                  "No documented installer command was assumed. "
+                  "The test only determines whether an actual installer "
+                  "package/installation evidence exists."
+              )
+          }
+
+          (root / "installer_detection.json").write_text(
+              json.dumps(result, indent=2),
+              encoding="utf-8"
+          )
+
+          print(json.dumps(result, indent=2))
+
+      - name: Snapshot AFTER
+        shell: python
+        run: |
+          import json
+          import subprocess
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_INSTALL_TEST")
+
+          def run(cmd):
+              try:
+                  p = subprocess.run(
+                      cmd,
+                      capture_output=True,
+                      text=True,
+                      errors="replace",
+                      timeout=30
+                  )
+                  return {
+                      "return_code": p.returncode,
+                      "stdout": p.stdout,
+                      "stderr": p.stderr
+                  }
+              except Exception as e:
+                  return {"error": repr(e)}
+
+          after = {
+              "program_files": run([
+                  "cmd", "/c", "dir",
+                  r"C:\Program Files"
+              ]),
+              "program_files_x86": run([
+                  "cmd", "/c", "dir",
+                  r"C:\Program Files (x86)"
+              ]),
+              "start_menu": run([
+                  "cmd", "/c", "dir",
+                  r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs"
+              ]),
+              "uninstall_registry": run([
+                  "reg", "query",
+                  r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                  "/s"
+              ])
+          }
+
+          (root / "after.json").write_text(
+              json.dumps(after, indent=2),
+              encoding="utf-8"
+          )
+
+          print("AFTER SNAPSHOT COMPLETE")
+
+      - name: Final install uninstall evidence
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          root = Path(r"C:\GOODDAYGOODBAY220_INSTALL_TEST")
+
+          result = {
+              "schema": "GOODDAYGOODBAY220_INSTALL_UNINSTALL_ONLY_V1",
+              "timestamp_utc": __import__("datetime").datetime.now(
+                  __import__("datetime").timezone.utc
+              ).isoformat(),
+              "installer_execution": "NOT_EXECUTED",
+              "uninstaller_execution": "NOT_EXECUTED",
+              "reason": (
+                  "The supplied release package contains an EXE only. "
+                  "No MSI/MSIX/APPX/setup package was present, and no "
+                  "undocumented install/uninstall switch was invented."
+              ),
+              "before_snapshot": "before.json",
+              "after_snapshot": "after.json"
+          }
+
+          (root / "FINAL_INSTALL_RESULT.json").write_text(
+              json.dumps(result, indent=2),
+              encoding="utf-8"
+          )
+
+          print(json.dumps(result, indent=2))
+
+      - name: Upload install evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GOODDAYGOODBAY220-INSTALL-UNINSTALL-EVIDENCE
+          path: C:\GOODDAYGOODBAY220_INSTALL_TEST
+          if-no-files-found: error
+          retention-days: 1
