@@ -7,7 +7,12 @@
         "ms-python.python",
         "ms-python.vscode-pylance",
         "github.vscode-github-actions"
-      ]
+      ],
+      "settings": {
+        "python.testing.pytestEnabled": true
+      }
     }
-  }
+  },
+  "postCreateCommand": "python -m pip install --upgrade pip",
+  "remoteUser": "vscode"
 }
