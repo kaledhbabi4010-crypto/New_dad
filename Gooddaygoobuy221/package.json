@@ -1,0 +1,13 @@
+{
+  "product": "GooddayGoodbay",
+  "package_version": "221",
+  "application_binary": "app/GooddayGoodbay220.exe",
+  "application_binary_sha256": "2d59428f34a9e613c51b0b770e6839e85abb5ecd9efbf3d9a6cf2e8edc28c350",
+  "source_package_sha256": "6a15d38a988a653ced29d549fa7bdf4a5c7c7cf82a7373afe32fb9fb3012a7cb",
+  "application_source_available": false,
+  "runtime_verification_required": true,
+  "installer": "install.ps1",
+  "uninstaller": "uninstall.ps1",
+  "verifier": "verify.ps1",
+  "windows_ci": ".github/workflows/gooddaygoodbay221-windows.yml"
+}
