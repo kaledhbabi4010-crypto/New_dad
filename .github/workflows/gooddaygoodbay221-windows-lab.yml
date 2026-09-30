@@ -1,0 +1,805 @@
+name: GooddayGoodbay221 Windows Real Evidence Lab
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+
+  windows-real-lab:
+
+    runs-on: windows-latest
+
+    timeout-minutes: 30
+
+    steps:
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Initialize evidence directory
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $lab = Join-Path $env:RUNNER_TEMP "goodday221-lab"
+
+          New-Item `
+            -ItemType Directory `
+            -Force `
+            -Path $lab |
+            Out-Null
+
+          "WINDOWS_REACHED=TRUE" |
+            Set-Content `
+            "$lab\WINDOWS_REACHED.txt"
+
+          Get-Date |
+            Set-Content `
+            "$lab\time.txt"
+
+          $env:RUNNER_OS |
+            Set-Content `
+            "$lab\runner-os.txt"
+
+      - name: Windows identity
+        shell: pwsh
+        run: |
+          $lab = Join-Path $env:RUNNER_TEMP "goodday221-lab"
+
+          Get-ComputerInfo |
+            Out-File `
+            "$lab\computer-info.txt" `
+            -Encoding utf8
+
+          systeminfo |
+            Out-File `
+            "$lab\systeminfo.txt" `
+            -Encoding utf8
+
+          Get-CimInstance Win32_OperatingSystem |
+            Format-List * |
+            Out-File `
+            "$lab\windows-os.txt" `
+            -Encoding utf8
+
+          Get-CimInstance Win32_Processor |
+            Format-List * |
+            Out-File `
+            "$lab\cpu.txt" `
+            -Encoding utf8
+
+      - name: Package discovery
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $root = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            "Gooddaygoobuy221"
+
+          if (!(Test-Path $root)) {
+            throw "Gooddaygoobuy221 directory missing."
+          }
+
+          Get-ChildItem `
+            $root `
+            -Recurse `
+            -Force |
+            Select-Object `
+              FullName,
+              Length,
+              Mode,
+              LastWriteTime |
+            Out-File `
+            "$env:RUNNER_TEMP\goodday221-lab\tree.txt" `
+            -Encoding utf8
+
+      - name: Verify original EXE
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $root = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            "Gooddaygoobuy221"
+
+          $exe = Join-Path `
+            $root `
+            "app\GooddayGoodbay220.exe"
+
+          if (!(Test-Path $exe)) {
+            throw "Original EXE missing."
+          }
+
+          $expected =
+            "2d59428f34a9e613c51b0b770e6839e85abb5ecd9efbf3d9a6cf2e8edc28c350"
+
+          $actual =
+            (Get-FileHash `
+              $exe `
+              -Algorithm SHA256).Hash.ToLower()
+
+          @(
+            "EXPECTED=$expected"
+            "ACTUAL=$actual"
+            "BYTES=$((Get-Item $exe).Length)"
+          ) |
+            Set-Content `
+            "$env:RUNNER_TEMP\goodday221-lab\original-exe-hash.txt"
+
+          if ($actual -ne $expected) {
+            throw "Original EXE SHA mismatch."
+          }
+
+      - name: Control plane syntax validation
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $root = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            "Gooddaygoobuy221"
+
+          $lab = Join-Path `
+            $env:RUNNER_TEMP `
+            "goodday221-lab"
+
+          foreach ($name in @(
+            "install.ps1",
+            "uninstall.ps1",
+            "verify.ps1"
+          )) {
+
+            $path = Join-Path $root $name
+
+            if (!(Test-Path $path)) {
+              "MISSING=$name" |
+                Add-Content "$lab\control-plane.txt"
+              continue
+            }
+
+            try {
+
+              $null = [System.Management.Automation.Language.Parser]::ParseFile(
+                $path,
+                [ref]$null,
+                [ref]$null
+              )
+
+              "PARSE_OK=$name" |
+                Add-Content "$lab\control-plane.txt"
+
+            }
+            catch {
+
+              "PARSE_FAIL=$name" |
+                Add-Content "$lab\control-plane.txt"
+
+              $_ |
+                Out-File "$lab\parse-error-$name.txt"
+            }
+          }
+
+      - name: Run verify.ps1
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $root = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            "Gooddaygoobuy221"
+
+          $lab = Join-Path `
+            $env:RUNNER_TEMP `
+            "goodday221-lab"
+
+          $script = Join-Path `
+            $root `
+            "verify.ps1"
+
+          if (Test-Path $script) {
+
+            & powershell.exe `
+              -NoProfile `
+              -NonInteractive `
+              -ExecutionPolicy Bypass `
+              -File $script *>&1 |
+              Tee-Object `
+              "$lab\verify-output.txt"
+
+            "EXIT=$LASTEXITCODE" |
+              Set-Content `
+              "$lab\verify-exit.txt"
+
+          }
+          else {
+
+            "VERIFY_SCRIPT_MISSING" |
+              Set-Content `
+              "$lab\verify-output.txt"
+          }
+
+      - name: Capture pre-install state
+        shell: pwsh
+        run: |
+          $lab = Join-Path `
+            $env:RUNNER_TEMP `
+            "goodday221-lab"
+
+          Get-Process |
+            Sort-Object ProcessName |
+            Select-Object Name,Id,Path |
+            Out-File `
+            "$lab\processes-before.txt" `
+            -Encoding utf8
+
+          Get-ChildItem `
+            "$env:USERPROFILE\Desktop" `
+            -Force `
+            -ErrorAction SilentlyContinue |
+            Select-Object FullName,Name,Length |
+            Out-File `
+            "$lab\desktop-before.txt" `
+            -Encoding utf8
+
+      - name: Install application
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $root = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            "Gooddaygoobuy221"
+
+          $lab = Join-Path `
+            $env:RUNNER_TEMP `
+            "goodday221-lab"
+
+          $installer = Join-Path `
+            $root `
+            "install.ps1"
+
+          if (!(Test-Path $installer)) {
+
+            "INSTALLER_MISSING" |
+              Set-Content `
+              "$lab\install-result.txt"
+
+            exit 0
+          }
+
+          & powershell.exe `
+            -NoProfile `
+            -NonInteractive `
+            -ExecutionPolicy Bypass `
+            -File $installer *>&1 |
+            Tee-Object `
+            "$lab\install-output.txt"
+
+          "EXIT=$LASTEXITCODE" |
+            Set-Content `
+            "$lab\install-result.txt"
+
+      - name: Discover installed files
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $lab = Join-Path `
+            $env:RUNNER_TEMP `
+            "goodday221-lab"
+
+          $roots = @(
+            "$env:ProgramFiles\GooddayGoodbay221",
+            "$env:ProgramFiles\GooddayGoodbay",
+            "$env:ProgramFiles\Goodday",
+            "$env:LOCALAPPDATA\GooddayGoodbay221",
+            "$env:LOCALAPPDATA\GooddayGoodbay",
+            "$env:LOCALAPPDATA\Goodday",
+            "$env:APPDATA\GooddayGoodbay221",
+            "$env:APPDATA\GooddayGoodbay",
+            "$env:USERPROFILE\GooddayGoodbay221"
+          )
+
+          $found = @()
+
+          foreach ($root in $roots) {
+
+            if (Test-Path $root) {
+
+              $found +=
+                Get-ChildItem `
+                  $root `
+                  -Recurse `
+                  -File `
+                  -ErrorAction SilentlyContinue
+            }
+          }
+
+          $found |
+            Select-Object FullName,Length |
+            Sort-Object FullName |
+            Format-Table -AutoSize |
+            Out-String |
+            Set-Content `
+            "$lab\installed-files.txt"
+
+          $expected =
+            "2d59428f34a9e613c51b0b770e6839e85abb5ecd9efbf3d9a6cf2e8edc28c350"
+
+          $matches = @()
+
+          foreach ($f in $found) {
+
+            try {
+
+              $hash =
+                (Get-FileHash `
+                  $f.FullName `
+                  -Algorithm SHA256).Hash.ToLower()
+
+              if ($hash -eq $expected) {
+
+                $matches += $f.FullName
+
+                "MATCH=$($f.FullName)" |
+                  Add-Content `
+                  "$lab\installed-exe-matches.txt"
+              }
+
+            }
+            catch {}
+          }
+
+          "COUNT=$($matches.Count)" |
+            Add-Content `
+            "$lab\installed-exe-matches.txt"
+
+      - name: Shortcut discovery
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $lab = Join-Path `
+            $env:RUNNER_TEMP `
+            "goodday221-lab"
+
+          $roots = @(
+            "$env:USERPROFILE\Desktop",
+            "$env:PUBLIC\Desktop",
+            "$env:APPDATA\Microsoft\Windows\Start Menu",
+            "$env:ProgramData\Microsoft\Windows\Start Menu"
+          )
+
+          $shell = New-Object -ComObject WScript.Shell
+
+          $results = @()
+
+          foreach ($root in $roots) {
+
+            if (!(Test-Path $root)) {
+              continue
+            }
+
+            $links =
+              Get-ChildItem `
+                $root `
+                -Recurse `
+                -Filter *.lnk `
+                -ErrorAction SilentlyContinue
+
+            foreach ($link in $links) {
+
+              try {
+
+                $s =
+                  $shell.CreateShortcut(
+                    $link.FullName
+                  )
+
+                $results += [PSCustomObject]@{
+                  Shortcut = $link.FullName
+                  Target = $s.TargetPath
+                  Arguments = $s.Arguments
+                  Exists = Test-Path $s.TargetPath
+                }
+
+              }
+              catch {}
+            }
+          }
+
+          $results |
+            ConvertTo-Json -Depth 10 |
+            Set-Content `
+            "$lab\shortcuts.json" `
+            -Encoding utf8
+
+      - name: Launch installed application
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $lab = Join-Path `
+            $env:RUNNER_TEMP `
+            "goodday221-lab"
+
+          $expected =
+            "2d59428f34a9e613c51b0b770e6839e85abb5ecd9efbf3d9a6cf2e8edc28c350"
+
+          $candidates = @(
+            "$env:ProgramFiles\GooddayGoodbay221\GooddayGoodbay220.exe",
+            "$env:ProgramFiles\GooddayGoodbay\GooddayGoodbay220.exe",
+            "$env:ProgramFiles\Goodday\GooddayGoodbay220.exe",
+            "$env:LOCALAPPDATA\GooddayGoodbay221\GooddayGoodbay220.exe",
+            "$env:LOCALAPPDATA\GooddayGoodbay\GooddayGoodbay220.exe",
+            "$env:LOCALAPPDATA\Goodday\GooddayGoodbay220.exe",
+            "$env:APPDATA\GooddayGoodbay221\GooddayGoodbay220.exe",
+            "$env:APPDATA\GooddayGoodbay\GooddayGoodbay220.exe"
+          )
+
+          $exe = $null
+
+          foreach ($candidate in $candidates) {
+
+            if (!(Test-Path $candidate)) {
+              continue
+            }
+
+            try {
+
+              $h =
+                (Get-FileHash `
+                  $candidate `
+                  -Algorithm SHA256).Hash.ToLower()
+
+              if ($h -eq $expected) {
+
+                $exe = $candidate
+                break
+              }
+            }
+            catch {}
+          }
+
+          if (!$exe) {
+
+            "STATUS=NO_VERIFIED_INSTALLED_EXE" |
+              Set-Content `
+              "$lab\launch.txt"
+
+            exit 0
+          }
+
+          "EXE=$exe" |
+            Set-Content `
+            "$lab\launch.txt"
+
+          try {
+
+            $p =
+              Start-Process `
+                -FilePath $exe `
+                -WorkingDirectory (
+                  Split-Path $exe
+                ) `
+                -PassThru
+
+            Start-Sleep -Seconds 5
+
+            "PID=$($p.Id)" |
+              Add-Content `
+              "$lab\launch.txt"
+
+            "HAS_EXITED=$($p.HasExited)" |
+              Add-Content `
+              "$lab\launch.txt"
+
+            if ($p.HasExited) {
+
+              "EXIT_CODE=$($p.ExitCode)" |
+                Add-Content `
+                "$lab\launch.txt"
+
+            }
+            else {
+
+              "RUNNING_AFTER_5_SECONDS=TRUE" |
+                Add-Content `
+                "$lab\launch.txt"
+
+              Stop-Process `
+                -Id $p.Id `
+                -Force `
+                -ErrorAction SilentlyContinue
+
+              "TERMINATED_AFTER_OBSERVATION=TRUE" |
+                Add-Content `
+                "$lab\launch.txt"
+            }
+
+            "STATUS=OBSERVED" |
+              Add-Content `
+              "$lab\launch.txt"
+          }
+          catch {
+
+            "STATUS=START_FAILED" |
+              Add-Content `
+              "$lab\launch.txt"
+
+            $_ |
+              Out-File `
+              "$lab\launch-error.txt"
+          }
+
+      - name: Reinstall test
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $root = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            "Gooddaygoobuy221"
+
+          $lab = Join-Path `
+            $env:RUNNER_TEMP `
+            "goodday221-lab"
+
+          $installer = Join-Path `
+            $root `
+            "install.ps1"
+
+          if (Test-Path $installer) {
+
+            & powershell.exe `
+              -NoProfile `
+              -NonInteractive `
+              -ExecutionPolicy Bypass `
+              -File $installer *>&1 |
+              Tee-Object `
+              "$lab\reinstall-output.txt"
+
+            "EXIT=$LASTEXITCODE" |
+              Set-Content `
+              "$lab\reinstall-result.txt"
+          }
+
+      - name: Uninstall test
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $root = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            "Gooddaygoobuy221"
+
+          $lab = Join-Path `
+            $env:RUNNER_TEMP `
+            "goodday221-lab"
+
+          $uninstaller = Join-Path `
+            $root `
+            "uninstall.ps1"
+
+          if (!(Test-Path $uninstaller)) {
+
+            "STATUS=MISSING" |
+              Set-Content `
+              "$lab\uninstall-result.txt"
+
+            exit 0
+          }
+
+          & powershell.exe `
+            -NoProfile `
+            -NonInteractive `
+            -ExecutionPolicy Bypass `
+            -File $uninstaller *>&1 |
+            Tee-Object `
+            "$lab\uninstall-output.txt"
+
+          "EXIT=$LASTEXITCODE" |
+            Set-Content `
+            "$lab\uninstall-result.txt"
+
+      - name: Cleanup verification
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $lab = Join-Path `
+            $env:RUNNER_TEMP `
+            "goodday221-lab"
+
+          $roots = @(
+            "$env:ProgramFiles\GooddayGoodbay221",
+            "$env:ProgramFiles\GooddayGoodbay",
+            "$env:ProgramFiles\Goodday",
+            "$env:LOCALAPPDATA\GooddayGoodbay221",
+            "$env:LOCALAPPDATA\GooddayGoodbay",
+            "$env:LOCALAPPDATA\Goodday",
+            "$env:APPDATA\GooddayGoodbay221",
+            "$env:APPDATA\GooddayGoodbay"
+          )
+
+          $remaining = @()
+
+          foreach ($root in $roots) {
+
+            if (Test-Path $root) {
+              $remaining += $root
+            }
+          }
+
+          "REMAINING_COUNT=$($remaining.Count)" |
+            Set-Content `
+            "$lab\cleanup.txt"
+
+          $remaining |
+            Set-Content `
+            "$lab\remaining-paths.txt"
+
+      - name: Windows Application Event Log
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $lab = Join-Path `
+            $env:RUNNER_TEMP `
+            "goodday221-lab"
+
+          Get-WinEvent `
+            -LogName Application `
+            -MaxEvents 500 `
+            -ErrorAction SilentlyContinue |
+            Where-Object {
+              $_.Message -match `
+              "Goodday|Goodbay|GooddayGoodbay|GooddayGoodbay220"
+            } |
+            Format-List `
+              TimeCreated,
+              Id,
+              LevelDisplayName,
+              ProviderName,
+              Message |
+            Out-File `
+            "$lab\application-events.txt" `
+            -Encoding utf8
+
+      - name: Final evidence verdict
+        shell: pwsh
+        run: |
+          $lab = Join-Path `
+            $env:RUNNER_TEMP `
+            "goodday221-lab"
+
+          $installedMatches = 0
+
+          if (Test-Path "$lab\installed-exe-matches.txt") {
+
+            $line =
+              Select-String `
+                -Path "$lab\installed-exe-matches.txt" `
+                -Pattern "^COUNT=" |
+              Select-Object -Last 1
+
+            if ($line) {
+
+              $installedMatches =
+                [int]($line.Line.Split("=")[1])
+            }
+          }
+
+          $cleanupRemaining = -1
+
+          if (Test-Path "$lab\cleanup.txt") {
+
+            $line =
+              Select-String `
+                -Path "$lab\cleanup.txt" `
+                -Pattern "^REMAINING_COUNT=" |
+              Select-Object -Last 1
+
+            if ($line) {
+
+              $cleanupRemaining =
+                [int]($line.Line.Split("=")[1])
+            }
+          }
+
+          $launchObserved = $false
+
+          if (Test-Path "$lab\launch.txt") {
+
+            $launchText =
+              Get-Content `
+                "$lab\launch.txt" `
+                -Raw
+
+            $launchObserved =
+              $launchText -match "STATUS=OBSERVED"
+          }
+
+          $windowsReached =
+            Test-Path "$lab\WINDOWS_REACHED.txt"
+
+          $originalExe =
+            Test-Path "$lab\original-exe-hash.txt"
+
+          $installedExe =
+            $installedMatches -gt 0
+
+          $cleanup =
+            $cleanupRemaining -eq 0
+
+          $mandatory = @(
+            $windowsReached,
+            $originalExe,
+            $installedExe,
+            $launchObserved,
+            $cleanup
+          )
+
+          if ($mandatory -notcontains $false) {
+
+            $verdict =
+              "WINDOWS_EVIDENCE_PASS"
+
+          }
+          else {
+
+            $verdict =
+              "WINDOWS_EVIDENCE_FAIL"
+          }
+
+          [ordered]@{
+
+            verdict = $verdict
+
+            run_id =
+              "${{ github.run_id }}"
+
+            repository =
+              "${{ github.repository }}"
+
+            commit =
+              "${{ github.sha }}"
+
+            runner_os =
+              $env:RUNNER_OS
+
+            windows_reached =
+              $windowsReached
+
+            original_exe_verified =
+              $originalExe
+
+            installed_exe_hash_matches =
+              $installedMatches
+
+            launch_observed =
+              $launchObserved
+
+            cleanup_remaining =
+              $cleanupRemaining
+
+          } |
+            ConvertTo-Json -Depth 10 |
+            Set-Content `
+            "$lab\FINAL_VERDICT.json" `
+            -Encoding utf8
+
+          Get-Content `
+            "$lab\FINAL_VERDICT.json"
+
+          if ($verdict -ne "WINDOWS_EVIDENCE_PASS") {
+            exit 1
+          }
+
+      - name: Upload Windows evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GooddayGoodbay221-Windows-Evidence-${{ github.run_id }}
+          path: ${{ runner.temp }}/goodday221-lab
+          if-no-files-found: error
+          retention-days: 14
