@@ -1,0 +1,54 @@
+name: GooddayGoodbay221 Windows Verification
+
+on:
+  workflow_dispatch:
+
+jobs:
+  windows-real-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify package files
+        shell: powershell
+        run: |
+          if (!(Test-Path ".\app\GooddayGoodbay220.exe")) {
+            throw "Application EXE missing"
+          }
+
+      - name: Run real Windows test
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:GITHUB_WORKSPACE\evidence" | Out-Null
+          try {
+            & powershell.exe -NoProfile -ExecutionPolicy Bypass `
+              -File ".\tools\windows_runtime_test.ps1" `
+              *> "$env:GITHUB_WORKSPACE\evidence\workflow.txt"
+          }
+          catch {
+            $_ | Out-File "$env:GITHUB_WORKSPACE\evidence\exception.txt"
+            exit 1
+          }
+
+      - name: Collect evidence
+        if: always()
+        shell: powershell
+        run: |
+          Copy-Item "$env:TEMP\GOODDAY221_EVIDENCE\*" `
+            "$env:GITHUB_WORKSPACE\evidence\" `
+            -Force -ErrorAction SilentlyContinue
+
+          Get-ChildItem "$env:GITHUB_WORKSPACE\evidence" -Recurse |
+            Select-Object FullName,Length |
+            ConvertTo-Json |
+            Set-Content "$env:GITHUB_WORKSPACE\evidence\inventory.json"
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GOODDAYGOODBAY221-WINDOWS-EVIDENCE
+          path: evidence
+          if-no-files-found: warn
