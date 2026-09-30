@@ -803,3 +803,137 @@ jobs:
           path: ${{ runner.temp }}/goodday221-lab
           if-no-files-found: error
           retention-days: 14
+  goodday221_windows_package_gate_v3:
+    name: GooddayGoodbay221 Windows Package Verification
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Windows identity
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          Write-Host "OS: $([System.Environment]::OSVersion.VersionString)"
+          Write-Host "Computer: $env:COMPUTERNAME"
+          Write-Host "PowerShell: $($PSVersionTable.PSVersion)"
+
+      - name: Locate exact repository package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $zip = Join-Path $env:GITHUB_WORKSPACE "Gooddaygoobuy221\GooddayGoodbay221.zip"
+
+          if (-not (Test-Path -LiteralPath $zip -PathType Leaf)) {
+            throw "Repository ZIP not found: $zip"
+          }
+
+          $item = Get-Item -LiteralPath $zip
+          $sha = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower()
+
+          Write-Host "ZIP=$zip"
+          Write-Host "SIZE=$($item.Length)"
+          Write-Host "SHA256=$sha"
+
+          if ($item.Length -ne 8224000) {
+            throw "ZIP size mismatch."
+          }
+
+          if ($sha -ne "a4db6774aeacdc63385694db50fac43cfd8bd641e74921794e082af8947d38f9") {
+            throw "ZIP SHA256 mismatch."
+          }
+
+      - name: Verify exact protected EXE inside package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $zip = Join-Path $env:GITHUB_WORKSPACE "Gooddaygoobuy221\GooddayGoodbay221.zip"
+          $temp = Join-Path $env:RUNNER_TEMP "goodday221-extract"
+
+          if (Test-Path $temp) {
+            Remove-Item -LiteralPath $temp -Recurse -Force
+          }
+
+          New-Item -ItemType Directory -Path $temp -Force | Out-Null
+
+          Expand-Archive -LiteralPath $zip -DestinationPath $temp -Force
+
+          $exe = Join-Path $temp "app\GooddayGoodbay220.exe"
+
+          if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
+            throw "Protected EXE missing from package."
+          }
+
+          $item = Get-Item -LiteralPath $exe
+          $sha = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLower()
+
+          Write-Host "EXE=$exe"
+          Write-Host "SIZE=$($item.Length)"
+          Write-Host "SHA256=$sha"
+
+          if ($item.Length -ne 8426551) {
+            throw "EXE size mismatch."
+          }
+
+          if ($sha -ne "2d59428f34a9e613c51b0b770e6839e85abb5ecd9efbf3d9a6cf2e8edc28c350") {
+            throw "EXE SHA256 mismatch."
+          }
+
+      - name: Validate package control files
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $root = Join-Path $env:GITHUB_WORKSPACE "Gooddaygoobuy221"
+
+          $required = @(
+            "GooddayGoodbay221.zip",
+            "install.ps1",
+            "uninstall.ps1",
+            "verify.ps1",
+            "SHA256_MANIFEST.json",
+            "VERSION",
+            "package.json"
+          )
+
+          foreach ($name in $required) {
+            $path = Join-Path $root $name
+
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Required control file missing: $name"
+            }
+
+            Write-Host "FOUND=$name"
+          }
+
+      - name: Execute repository verification script
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $ErrorActionPreference = "Continue"
+
+          $script = Join-Path $env:GITHUB_WORKSPACE "Gooddaygoobuy221\verify.ps1"
+
+          if (-not (Test-Path -LiteralPath $script -PathType Leaf)) {
+            Write-Host "verify.ps1 not found."
+            exit 0
+          }
+
+          & $script
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "verify.ps1 exit code: $LASTEXITCODE"
+          }
+
+      - name: Upload exact verified repository package
+        uses: actions/upload-artifact@v4
+        with:
+          name: GooddayGoodbay221-Windows-Verified-${{ github.run_id }}
+          path: Gooddaygoobuy221/GooddayGoodbay221.zip
+          if-no-files-found: error
+          retention-days: 7
