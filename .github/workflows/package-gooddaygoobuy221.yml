@@ -54,6 +54,35 @@ jobs:
           "ARCHIVE_ROUNDTRIP_PASS"
           "ARCHIVE_PATH=$zip"
 
+      - name: Attempt real Windows executable launch
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          $ErrorActionPreference = "Continue"
+          $root = Join-Path $env:GITHUB_WORKSPACE "Gooddaygoobuy221"
+          $exe = Join-Path $root "app\GooddayGoodbay220.exe"
+          $evidence = Join-Path $env:RUNNER_TEMP "goodday221-runtime"
+          New-Item -ItemType Directory -Path $evidence -Force | Out-Null
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          "EXE_SHA256=$hash" | Set-Content (Join-Path $evidence "runtime.txt")
+          try {
+            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+            Start-Sleep -Seconds 10
+            $p.Refresh()
+            if ($p.HasExited) {
+              "STARTED=TRUE" | Add-Content (Join-Path $evidence "runtime.txt")
+              "RUNNING_AFTER_10_SECONDS=FALSE" | Add-Content (Join-Path $evidence "runtime.txt")
+              "EXIT_CODE=$($p.ExitCode)" | Add-Content (Join-Path $evidence "runtime.txt")
+            } else {
+              "STARTED=TRUE" | Add-Content (Join-Path $evidence "runtime.txt")
+              "RUNNING_AFTER_10_SECONDS=TRUE" | Add-Content (Join-Path $evidence "runtime.txt")
+              Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            }
+          } catch {
+            "STARTED=FALSE" | Add-Content (Join-Path $evidence "runtime.txt")
+            $_ | Out-File (Join-Path $evidence "launch-error.txt") -Encoding utf8
+          }
+
       - name: Upload requested ZIP package
         uses: actions/upload-artifact@v4
         with:
@@ -61,3 +90,23 @@ jobs:
           path: ${{ runner.temp }}/gooddaygoobuy 221.Zip
           if-no-files-found: error
           retention-days: 30
+
+      - name: Upload runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gooddaygoobuy-221-runtime-evidence
+          path: ${{ runner.temp }}/goodday221-runtime
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Enforce truthful runtime result
+        if: always()
+        shell: pwsh
+        run: |
+          $result = Join-Path $env:RUNNER_TEMP "goodday221-runtime\runtime.txt"
+          if (!(Test-Path $result)) { throw "RUNTIME_EVIDENCE_MISSING" }
+          $raw = Get-Content $result -Raw
+          if ($raw -notmatch "RUNNING_AFTER_10_SECONDS=TRUE") {
+            throw "RUNTIME_TEST_FAILED: application did not remain running for 10 seconds. Inspect the runtime evidence artifact."
+          }
