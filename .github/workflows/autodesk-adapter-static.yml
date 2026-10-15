@@ -1,0 +1,57 @@
+name: Autodesk adapter static validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "AutodeskIntegration/**"
+      - ".github/workflows/autodesk-adapter-static.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-validation:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate project XML and source boundaries
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          [xml](Get-Content "AutodeskIntegration/Revit/Goodday.AutodeskSmoke.Revit.csproj" -Raw) | Out-Null
+          [xml](Get-Content "AutodeskIntegration/AutoCAD/Goodday.AutodeskSmoke.AutoCAD.csproj" -Raw) | Out-Null
+          $revit = Get-Content "AutodeskIntegration/Revit/RevitSmokeCommand.cs" -Raw
+          $acad = Get-Content "AutodeskIntegration/AutoCAD/AutoCADSmokeCommands.cs" -Raw
+          $matrix = Get-Content "AutodeskIntegration/COMPATIBILITY_MATRIX.md" -Raw
+          if ($revit -notmatch "IExternalCommand" -or $revit -notmatch "TransactionMode.ReadOnly") { throw "Revit read-only command contract missing." }
+          if ($acad -notmatch 'CommandMethod\("GOODDAYSMOKE"' -or $acad -notmatch "OpenMode.ForRead") { throw "AutoCAD read-only command contract missing." }
+          if ($matrix -notmatch "2016" -or $matrix -notmatch "2027" -or $matrix -notmatch "official") { throw "Compatibility matrix incomplete." }
+          "STATIC_VALIDATION_PASS"
+          "AUTODESK_HOST_TEST=NOT_RUN_ON_GITHUB_HOSTED_RUNNER"
+
+      - name: Validate inventory script PowerShell syntax
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "AutodeskIntegration/tools/Test-AutodeskHostInventory.ps1",
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) { $errors | Format-List | Out-String | Write-Error }
+          "POWERSHELL_SYNTAX_PASS"
+
+      - name: Upload static validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autodesk-adapter-static-\${{ github.run_id }}
+          path: AutodeskIntegration/
+          if-no-files-found: error
+          retention-days: 14
