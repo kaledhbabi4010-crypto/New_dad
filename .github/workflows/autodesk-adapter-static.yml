@@ -51,7 +51,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: autodesk-adapter-static-\${{ github.run_id }}
+          name: autodesk-adapter-static-${{ github.run_id }}
           path: AutodeskIntegration/
           if-no-files-found: error
           retention-days: 14
