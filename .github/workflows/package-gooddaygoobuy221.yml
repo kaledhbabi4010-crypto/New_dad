@@ -1,0 +1,63 @@
+name: Package gooddaygoobuy 221
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "Gooddaygoobuy221/**"
+      - ".github/workflows/package-gooddaygoobuy221.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate package metadata and executable hash
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = Join-Path $env:GITHUB_WORKSPACE "Gooddaygoobuy221"
+          $metadataPath = Join-Path $root "package.json"
+          if (!(Test-Path $metadataPath)) { throw "package.json missing" }
+          $metadata = Get-Content $metadataPath -Raw | ConvertFrom-Json
+          $exe = Join-Path $root $metadata.application_binary
+          if (!(Test-Path $exe)) { throw "Application executable missing: $exe" }
+          $actual = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $metadata.application_binary_sha256.ToLowerInvariant()) {
+            throw "Executable SHA256 mismatch. Expected $($metadata.application_binary_sha256); got $actual"
+          }
+          "PACKAGE_METADATA_VALID"
+          "EXECUTABLE_SHA256=$actual"
+
+      - name: Validate archive contents
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $root = Join-Path $env:GITHUB_WORKSPACE "Gooddaygoobuy221"
+          $zip = Join-Path $env:RUNNER_TEMP "gooddaygoobuy 221.Zip"
+          $unpack = Join-Path $env:RUNNER_TEMP "gooddaygoobuy221-unpack"
+          Compress-Archive -Path (Join-Path $root "*") -DestinationPath $zip -Force
+          Expand-Archive -Path $zip -DestinationPath $unpack -Force
+          if (!(Test-Path (Join-Path $unpack "package.json"))) { throw "Archive missing package.json" }
+          $metadata = Get-Content (Join-Path $unpack "package.json") -Raw | ConvertFrom-Json
+          $exe = Join-Path $unpack $metadata.application_binary
+          if (!(Test-Path $exe)) { throw "Archive missing application executable" }
+          $actual = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $metadata.application_binary_sha256.ToLowerInvariant()) { throw "Archived executable hash mismatch" }
+          "ARCHIVE_ROUNDTRIP_PASS"
+          "ARCHIVE_PATH=$zip"
+
+      - name: Upload requested ZIP package
+        uses: actions/upload-artifact@v4
+        with:
+          name: gooddaygoobuy 221
+          path: ${{ runner.temp }}/gooddaygoobuy 221.Zip
+          if-no-files-found: error
+          retention-days: 30
