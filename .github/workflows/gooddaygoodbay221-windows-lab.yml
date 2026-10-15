@@ -2,6 +2,11 @@ name: GooddayGoodbay221 Windows Real Evidence Lab
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/gooddaygoodbay221-windows-lab.yml"
+      - "Gooddaygoobuy221/**"
 
 permissions:
   contents: read
@@ -715,8 +720,9 @@ jobs:
                 "$lab\launch.txt" `
                 -Raw
 
+            # A launch counts only when the executable stayed alive for the observation window.
             $launchObserved =
-              $launchText -match "STATUS=OBSERVED"
+              $launchText -match "RUNNING_AFTER_5_SECONDS=TRUE"
           }
 
           $windowsReached =
