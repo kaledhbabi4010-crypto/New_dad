@@ -1,0 +1,40 @@
+name: Autodesk real-host inventory 2016-2027
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inventory:
+    # Requires an authorized machine with Autodesk products installed.
+    # GitHub-hosted windows-latest is intentionally not used here.
+    runs-on: [self-hosted, windows, autodesk]
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prove runner identity
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force evidence | Out-Null
+          Get-ComputerInfo | Out-File evidence/computer-info.txt -Encoding utf8
+          Get-CimInstance Win32_OperatingSystem | Format-List * | Out-File evidence/windows-os.txt -Encoding utf8
+          "RUNNER=$env:COMPUTERNAME" | Out-File evidence/runner.txt -Encoding utf8
+          "COMMIT=$(git rev-parse HEAD)" | Out-File evidence/commit.txt -Encoding utf8
+
+      - name: Inventory real Autodesk installations
+        shell: pwsh
+        run: |
+          ./AutodeskIntegration/tools/Test-AutodeskHostInventory.ps1
+
+      - name: Upload inventory evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: autodesk-real-host-inventory-\${{ github.run_id }}
+          path: evidence/
+          if-no-files-found: error
+          retention-days: 30
